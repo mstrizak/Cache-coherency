@@ -2,7 +2,7 @@ module icache #(
     parameter int LINE_WIDTH = 128,
     parameter int WORD_WIDTH = 32,
     parameter int NUM_WAYS   = 4,
-    parameter int NUM_SETS   = 64,
+    parameter int NUM_SETS   = 16,
     parameter int ADDR_WIDTH = 32
 ) (
     input   logic                   clk,
@@ -18,7 +18,7 @@ module icache #(
     output  logic                   mem_req_o,
     output  logic [ADDR_WIDTH-1:0]  mem_addr_o,
     input   logic                   mem_valid_i,
-    input   logic [WORD_WIDTH-1:0]  mem_inst_i
+    input   logic [LINE_WIDTH-1:0]  mem_inst_i
 );
 
     localparam int WORD_OFFSET_BITS = $clog2(LINE_WIDTH / WORD_WIDTH);
@@ -38,6 +38,7 @@ module icache #(
     } state_t;
 
     state_t state, next_state;
+    logic   refill_en;
 
     logic [INDEX_BITS-1:0]          index;
     logic [TAG_BITS-1:0]            tag;
@@ -69,17 +70,6 @@ module icache #(
 
     assign sel_word = cache[index][hit_way].inst[word_offset*WORD_WIDTH +: WORD_WIDTH];
 
-    // refill and lru update
-    always_ff @(posedge clk) begin
-        if (state == REFILL && mem_valid_i) begin
-            replace_way = lru[index]; // LRU decision
-            cache[index][replace_way].valid <= 1;
-            cache[index][replace_way].tag   <= tag;
-            cache[index][replace_way].inst  <= mem_inst_i;
-            lru[index] <= (lru[index] + 1) % NUM_WAYS; // simple round-robin LRU
-        end
-    end
-
     // FSM 
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
@@ -87,9 +77,32 @@ module icache #(
         else
             state <= next_state;
     end
+    
+    // refill and lru update
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (~rst_n) begin
+            for (int s = 0; s < NUM_SETS; s++) begin
+                for (int w = 0; w < NUM_WAYS; w++) begin
+                    cache[s][w].valid <= 1'b0;
+                    cache[s][w].tag   <= '0;
+                    cache[s][w].inst  <= '0;
+                end
+                lru[s] <= '0;
+            end
+        end else begin
+            if (refill_en) begin
+            replace_way = lru[index]; // LRU decision
+            cache[index][replace_way].valid <= 1;
+            cache[index][replace_way].tag   <= tag;
+            cache[index][replace_way].inst  <= mem_inst_i;
+            lru[index] <= (lru[index] + 1) % NUM_WAYS; // simple round-robin LRU
+        end
+        end
+    end
 
     always_comb begin
         next_state = state;
+        refill_en  = '0;
         case (state)
             IDLE: begin
                 if (cpu_req_i && !hit)
@@ -100,6 +113,7 @@ module icache #(
                     next_state = REFILL;
             end
             REFILL: begin
+                refill_en  = 1'b1;
                 next_state = IDLE;
             end
         endcase
