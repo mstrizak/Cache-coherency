@@ -110,3 +110,5 @@ module icache #(
     assign cpu_valid_o = (state == IDLE && hit);
     assign mem_req_o   = (state == MISS);
     assign mem_addr_o  = {cpu_addr_i[ADDR_WIDTH-1:WORD_OFFSET_BITS+2], {WORD_OFFSET_BITS+2{1'b0}}};
+
+endmodule
