@@ -43,6 +43,7 @@ module icache #(
     logic [TAG_BITS-1:0]            tag;
     logic [WORD_OFFSET_BITS-1:0]    word_offset;
     logic [1:0]                     lru [NUM_SETS];
+    logic [1:0]                     replace_way;
     cache_line_t                    cache [NUM_SETS][NUM_WAYS];
 
     // assign index, tag, word_offset
@@ -71,17 +72,17 @@ module icache #(
     // refill and lru update
     always_ff @(posedge clk) begin
         if (state == REFILL && mem_valid_i) begin
-            int replace_way = lru[index]; // LRU decision
+            replace_way = lru[index]; // LRU decision
             cache[index][replace_way].valid <= 1;
             cache[index][replace_way].tag   <= tag;
-            cache[index][replace_way].data  <= mem_data_i;
+            cache[index][replace_way].inst  <= mem_inst_i;
             lru[index] <= (lru[index] + 1) % NUM_WAYS; // simple round-robin LRU
         end
     end
 
     // FSM 
-    always_ff @(posedge clk or posedge reset) begin
-        if (reset)
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (~rst_n)
             state <= IDLE;
         else
             state <= next_state;
