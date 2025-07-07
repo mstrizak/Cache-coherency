@@ -1,0 +1,3 @@
+[submodule "RV32IM"]
+	path = RV32IM
+	url = https://github.com/EE632018/RV32IM.git
