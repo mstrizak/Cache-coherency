@@ -12,6 +12,8 @@ entity data_path is
       -- interfejs ka memoriji za instrukcije
       instr_mem_address_o : out std_logic_vector (31 downto 0);
       instr_mem_read_i    : in  std_logic_vector(31 downto 0);
+      instr_mem_req_o     : out std_logic;
+      instr_mem_valid_i   : in  std_logic;
       instruction_o       : out std_logic_vector(31 downto 0);
       -- interfejs ka memoriji za podatke
       data_mem_address_o  : out std_logic_vector(31 downto 0);
@@ -395,7 +397,7 @@ begin
 
    --***********  Kombinaciona logika  ***************
    -- sabirac za uvecavanje programskog brojaca (sledeca instrukcija)
-   pc_adder_if_s <= std_logic_vector(unsigned(pc_reg_if_s) + to_unsigned(4, 32));
+   pc_adder_if_s <= std_logic_vector(unsigned(pc_reg_if_s) + to_unsigned(4, 32)) when (instr_mem_valid_i && pc_en_i) else pc_reg_if_s;
 
    
 
@@ -748,14 +750,14 @@ begin
    instruction_o       <= instruction_id_s;
    -- Sa memorijom za instrukcije
    instr_mem_address_o <= pc_reg_if_s;
-   instruction_if_s    <= instr_mem_read_i;
+   instruction_if_s    <= instr_mem_read_i when (instr_mem_valid_i && pc_en_i) else (others => '0');
    -- Sa memorijom za podatke
    data_mem_address_o  <= alu_result_mem_s;
    data_mem_write_o    <= rs2_data_mem_s;
    data_mem_read_mem_s <= data_mem_read_i;
    funct3_mem_s        <= funct3_mem_i;
    rd_mux_s            <= rd_mux_i;
-   
+   instr_mem_req_o     <= pc_en_i;
 
    
    -- Logika koja nam multipleksira koji tip Load instrukcije cemo raditi u sistemu

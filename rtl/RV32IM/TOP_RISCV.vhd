@@ -10,6 +10,8 @@ entity TOP_RISCV is
       -- Interfejs ka memoriji za instrukcije
       instr_mem_address_o : out std_logic_vector(31 downto 0);
       instr_mem_read_i    : in  std_logic_vector(31 downto 0);
+      instr_mem_req_o     : out std_logic;
+      instr_mem_valid_i   : in  std_logic;
       -- Interfejs ka memoriji za podatke
       data_mem_address_o  : out std_logic_vector(31 downto 0);
       data_mem_read_i     : in  std_logic_vector(31 downto 0);
@@ -61,6 +63,8 @@ begin
          -- interfejs ka memoriji za instrukcije
          instr_mem_address_o => instr_mem_address_o,
          instr_mem_read_i    => instr_mem_read_i,
+         instr_mem_req_o     => instr_mem_req_o,
+         instr_mem_valid_i   => instr_mem_valid_i,
          instruction_o       => instruction_s,
          -- interfejs ka memoriji za podatke
          data_mem_address_o  => data_mem_address_o,
