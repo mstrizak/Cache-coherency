@@ -1,0 +1,257 @@
+********************* GIT LOG*********************
+
+**************************************************
+
+
+Arhitektura skupa instrukcija opisuje na koji nacin odredjeni procesor funkcionise i koje su njegove mogucnosti. 
+Ona opisuje registre koje ce procesor imati kao i sve masinske instrukcije podrzavati. 
+ISA predstavlja spregu izmedju hardvera i softvera. 
+Danas imamo mnogo arhitektura koje se dele u dve osnovne grupe: RISC i CISC. 
+
+Reduced instruction set architecture- koristi se veci broj jednostavnih instrukcija kako bi se program izvrsio,
+pri cemu se instrukcije izvrsavaju samo jedan ciklus. Dekodovanje instrukcija jednostavno a implementacija protocne obrade 
+laka. Koristi se registarsko-registarski model, pri cemu se aritmeticko logicke operacije izvrsavaju nad registrima. 
+LOAD i STORE se koriste za prebacivanje sadrzaja iz memorije u registre i suprotno. 
+
+Complex Instruction set architecture- koristi se manji broj kompleksnih instrukcija kako bi se program izvrsio, pri cemu se instrukcije 
+izvrsavaju vise taktova. Dekodovanje instrukcija komplikovano kao i implementacija. Operacije ne moraju biti strogo reg-reg,
+te je moguce da su operandi u memoriji. 
+
+Svaki RISC-V skup instrukcija krece slovima RV a zatim je pracen sirinom registara u datoj implementaciji.
+RV32, RV64, RV128. 
+Nakon sirine registara se odredjuju skupovi instrukcija koji ce biti implementirani:
+I - Osnovni set instrukcija za rad sa celim brojevima
+M - Mnozenje i deljenje celobrojnih podataka
+A - Atomicne operacije za interprocesnu sinhronizaciju
+F - Operacije brojevima sa pokretnim zarezom, jednostruka preciznost
+D - Operacije brojevima sa pokretnim zarezom, dvostruka preciznost
+S - Nadzorni mod
+Q - Operacije brojevima sa pokretnim zarezom, cetvorostruka preciznost 
+C - Kompresovane instrukcije
+E - Embeded mikroprocesor, broj registara smanjen na 16
+
+Postoje jos dodatne modifikacije koje su naglasene u specifikaciji ali nisu podrzane jos uvek. 
+
+Tri pravila harverskog dizajna kojeg su se drzali autori RISC-V arhitekture su:
+	1. Jednostavnost nastaje iz regularnosti
+	2. Manje je brze
+	3. Dobar dizajn zahteva dobar kompromis
+
+Operandi instrukcija iz ISA su ograniceni na 32 registra koja se nalaze u procesoru. Po RISC-V specifikaciji se ova 32 
+registra opste namene oznacavaju imanima x0 do x31. Samo registar x0 je specifican jer uvek sadrzi vrednost 0. 
+
+Instrukcije za prenos podatka od memorije ka registru se zove load. 
+Instrukcije za prenos podatka od registra ka memoriji se zove store.
+RISC-V je little-endian arhitektura. 
+Bitno je naglasiti da svaki RISC-V procesor ima i programski brojac. Programski brojac cuva adresu instrukcije koja se treba 
+izvrsiti. On pokazuje na adresu u memoriji na kojoj se cuva kodirana instrukcija. Pri sekvencijalnom izvrsavanju instrukcija 
+PC se uvecava za 4. Njegovu vrednost mogu promeniti samo instrukcije uslovnih i bezuslovnih skokova. 
+
+Instrukcije za RISCV procesore su 32 bitne i one se iskljucivo izvrsavaju nad registrima. RISCV je takozvana arhitektura sa tri adrese.
+Instrukcije su podeljene na polja u zavisnosti od funkcije koju oni imaju u instrukciji. 
+	1. opcode - operation code, kod instrukcije, vrsi osnovnu podelu instrukcija
+	2. funct3 - dodatna 3 bita polju opcode, za definisanje instukcije
+	3. funct7 - dodatnih 7 bita polju opcode, za dataljnije definisanje instrukcija
+	4. rs1 - prvi operand
+	5. rs2 - drugi operand
+	6. rd - ciljni registar, u koji se smesta razultat insrukcije
+	7. imm - immediate, polje koje sadrzi konstantu
+	
+
+*********************************************************************************************************************************************
+									Vezba 2
+*********************************************************************************************************************************************
+
+RISCV procesor komunicira sa dve memorije. U prvu smesta instrukcije, a u drugu podatke, pri cemu se komunikacija obavlja preko dva interfejsa
+	-> interfejs za komunikaciju sa memorijom za instrukcije, koji mora da obezbedi samo mogucnost citanja
+	-> interfejs za komunikaciju sa memorijom za podatke, koji mora da obezbedi i citanje i pisanje
+Hardverska implementacija podeljena je u dve celine: Controlpath i datapath. Controlpath predstavlja logiku za kontrolu komponenti u datapath-u.
+U zavisnosti od instrukcije koju procesor trenutno izvrsava, controlpath generise signale koji upravljaju komponentama u datapath-u na takav nacin
+da se izvrsi adekvatna operacija. 
+Memorija za instrukcije i memorija za podatke se ne nalaze unutar arhitekture procesora. 
+Memorija za instrukcije je memorija sa asinhronim citanjem i u njoj je smesten program koji treba da se izvrsi. Koje instrukcije ce biti izvrsene 
+zavisi od PC koji generise adresu na kojoj se nalazi naredna instrukcija. Ovde je bitno naglasiti da se PC uvek uvecava za 4 jer svaka instrukcija 
+je sirine 32 bita. PC je registar sto znaci da naredna vrednost na njegovom izlazu pojaviti na rastucoj ivici takta, a kako je memorija za instrukcije sa 
+asinhronim citanjem pri svakoj promeni stanja PC promenice se i izlaz memorije. 
+
+
+********1. Komponenta - registarska banka ************
+Registarska banka sadrzi 32 registra sirine 32 bita i uloga svakog od registara objasnjena je na prethodnim vezbama. Komunikacija sa registarskom bankom odvija 
+se preko dva interfejsa za citanje i jednog interfejsa za upis.
+Interfejs za citanje podatka sastoji se iz dva pristupa. Citanje podataka iz memorije je asinhrono. 
+Interfejs za upis podataka se sastoji iz addr,data i we pristupa. Upis podatak je sinhron. 
+
+********2. Komponenta - ALU **************************
+Uloga ALU jedinice je obavljanje aritmeticko logickih operacija. Interfejs je sledeci 
+a) Dva ulazna porta za operande nad kojima se vrsi aritmeticko logicka operacija
+b) Ulaznog porta alu_op za izbor operacije koju treba izvrsiti. 
+c) Izlaznog porta na kome se pojavljuje rezultat operacije. 
+Tacka a) dolazi iz registarske banke, b) kontrolise ControlPath, a tacka c) je dovedena na ulaz registarske banke. 
+ 
+********3. Komponenta - Memorija za podatke ***********
+Memorija ima jednostavan interfejs koji se sastoji:
+a) Addr port -> odredjuje sa koje adrese se cita, odnosno na koju adresu se pise.
+b) data_i -> predstavlja ulazni port za upis podataka. Upis je sinhron.
+c) data_o -> predstavlja izlazni port citanja podataka. Citanje je asinhrono.
+d) data_we -> predstavlja ulazni port dozvole upisa i kontrolisan je od strane signala koji potice iz controlpath celine.
+
+********4. Komponenta - Immediate *********************
+Uloga je da prosiri konstantu sa 12 bita na 32, pri cemu se gornji prosiruju nulama ili jedinicama u zavisnosti od najviseg bita
+immediate polja kako bi se odrzao predznak konstante. Nezavisno od formata instrukcije, najvisi bit immediate polja ce se uvek poklapati sa najvisim 
+bitom instrukcije. Prosirenje je neophodno uraditi kako bi ALU jedinica mogla da sabere immediate polje sa rs1 izlazom registarske banke jer ona ocekuje da oba 
+ulazna operanda budu iste sirine od 32 bita. Interfejs immediate komponente se sastoji od dva porta:
+a) Instruction predstavlja ulazni port preko koga se prima instrukcija
+b) Immediate_extended izlazni port predstavlja prosireno immediate polje
+Opcode polje je takodje neophodno jer na osnovu njega koji format instrukcije je u pitanju i shodno tome vrsi prosirivanje. 
+
+********5. Komponenta - Mux****************************
+Poslednja komponenta koja je neophodna kako bi se multipleksirao ulaz b ALU jedinice i njega kontrolise alu_src_b signal iz controlpath dela. 
+   
+!!!Sve ove komponente su neophodne da bi se moglo uraditi upisivanje u memoriju za podatke (STORE)!!!
+
+Za upisivanje podataka iz memorije za podatke potrebno je ubaciti dodatni mux koji ce kontrolisati izlaz te memorije i sta ce se upisivati u registarsku banku. 
+Ovde su nam od interesa instrukcije I tipa! Konkretna polja su imm(11:0),rs1 i rd. Rd predstavlja registar u koji ce se smestiti podatak iz memorije, dok suma 
+izmedju rs1 i immediate polja predstavljaju adresu u memoriji za podatke sa koje treba da se ucita informacija. 
+
+Potrebna nam je opet Immediate komponenta da prosirimo polje imm(11:0) na 32 bita. Dodatna komponenta jeste mux 2 na 1 i on odredjuje sta ce biti upisano u registarsku banku.
+Njegov selekcioni ulaz je takodje kontrolisan od strane controlpath celine. 
+
+******** Implementacija instrukcije uslovnog skoka ********************
+Prilikom implementiranja svih instrukcija do sada, PC se uvek uvecavao za konstantnu vrednost, odnosno instrukcije su uvek izvrsavane sekvencijalno.
+Ubacivanjem uslovnog skoka, omogucava se skok na proizvoljnu instrukciju u memoriji ukoliko je uslov jednakosti ispunjen. 
+Ovo pripada B tipu instrukcija!!!
+Polja koja nisu od interesa su funct3 i opcode. Rs1 i rs2 polja sadrze u sebi adrese registara koji se porede i od njihove jednakosti zavisi da li ce
+se desiti skok ili ne. U immediate poljima se krije informacija koliko bajtova treba skociti do zeljene instrukcije. Moramo immediate polje prvo da 
+konkataniramo (preslozimo bite)  i nakon toga prosirivanje na 32 bita. 
+
+Jos jedna operacija koju treba dodati jeste pomeranje prosirene vrednosti za jednu poziciju levo. Rezultat nakon pomeranja predstavice broj bajtova od trenutne 
+vrednosti PC do naredne instrukcije koju treba izvrsiti. Smisao iz pomeranja jeste da bi se prosirio opseg instrukcija do kojih moze da se skoci. 
+
+Ova vrednost se sabira sa trenutnom vrednoscu PC i da li ce se proslediti na ulaz PC zavisi od pc_sel, selekcionog signala koji je generisan od strane contrlopath 
+dela. Da li ce se ovo desiti zavisi od branch_condition signala koji nam govori da li su jednaki ulazi a i b. 
+
+*******************************************************************************************************************************************************************
+										Controlpath
+*******************************************************************************************************************************************************************
+
+Osnovna dva bloka od kojih se sastoji controlpath celina su: control decoder i alu decoder. Razdvajanje ove dve komponente nije bilo neophodno mogli smo i napraviti kao 
+jednu komponentu. 
+
+********1. Komponenta - Alu decoder **********************************
+Alu decoder je komponenta zaduzena za kontrolisanje ALU jedinice, odnosno ona odredjuje koju instrukciju ALU treba da izvrsi. Njen interes se sastoji iz sledecih portova:
+	1. alu_2bit_op -> 2 bitni ulazni port kontrolisan od strane control decoder komponente.
+	2. funct3	-> 3 bitni ulazni port preko koga se primaju 3 bita instrukcije koji predstavljaju polje funct3
+	3. funct7	-> 7 bitni ulazni port preko koga se primaju 7 bita instrukcije koji predstavljaju polje funct7
+	4. alu_op	-> 5 bitni izlazni port koji generise kontrolne signale za upravljanje ALU jedinicom.
+	
+********2. Komponenta - Control decoder ******************************	
+Control decoder je komponenta zaduzena za generisanje kontrolnih signala kojima se kontrolisu sve ostale komponente u datapath celini i njen interfejs se sastoji 
+iz sledecih portova:
+	1. opcode	-> ulazni port preko koga prima 7 bita instrukcije koja se izvrsava.
+	2. branch	-> Izlazni port koji se postavlja na visok nivo ukoliko je iz instrukcione memorije zahvacena BEQ instrukcija.
+	3. rd_we	-> izlazni port koji se postavlja na visok nivo ukoliko instrukcija prihvacena iz instrukcione memorije upisuje podatak u registarsku banku
+	4. alu_src_a	-> izlazni port koji se postavlja na visok nivo ukoliko instrukcija koja se izvrsava prosledjuje immediate_extended vrednost umesto b.
+	5. data_mem_we	-> izlazni port koji se postavlja na visok nivo ukoliko instrukcija prihvacena iz instrukcione memorije upisuje podatak u memoriju za podatke. 
+	6. mem_to_reg 	-> izlazni port koje kontrolise mux ispred memorije za podatke i koji se postavlja na visok nivo ukoliko je u registarsku banku potrebno 
+			   upisati podatak iz memorije za podatke, a nizak kada se prosledjuje iz ALU jedinice. 
+        7. alu_2bit_op -> 2 bitni izlazni port koji se prosledjuje alu decoderu i na osnovu koga se odredjuje koja operacija treba da se izvrsi.
+
+*********************************************************************************************************************************************
+									Vezba 3
+*********************************************************************************************************************************************
+
+Osnovni princip protocne obrade -> protocna obrada je tehnika implementacije procesora kod koje se vise instrukcija izvrsava istovremeno.
+Paralelizam u protocnoj obradi jeste glavni razlog njene vece efikasnosti, odnosno u istom intervalu vremena odradice se veca kolicina informacija. 
+Ukoliko sve faze zahtevaju istu kolicinu vremena da se izvrse i ako postoji dovoljno posla, onda ce ubrzanje biti jednako umnosku broja faza protocne obrade.
+
+Faze u RISCV procesoru bice podeljenje na sledeci nacin:
+	1. Instruction fetch
+	2. Instruction decode
+	3. Execute
+	4. Memory
+	5. Write back
+
+Kod implementacije sa protocnom obradom perioda takta ce biti srazmerna propagacionom vremenu faze protocne obrade koja se najvise izvrsava.
+
+Formula za protocnu obradu: 
+	Ubrzanje = (broj instrukcija * Tsigle_cycle)/(Broj instrukcija -1) * Tpipe+Tpopunjavanja_pipelina
+Mozemo da zakljucimo da sto se veci broj instrukcija izvrsava to je poboljsanje vece!!!
+
+Registri dele faze izvrsavanja tako sto omogucavaju da se rezultati pojedinacnih faza sacuvaju u njima na rastucoj ivici takta. Osim dodavanja registara,
+neophodno je kroz sve faze proslediti adresu registra u koji se instrukcija upisuje. Ovo se radi kako bi rezultat izvrsavanja instrukcije i adresa registra istovremeno stigli 
+do registarske banke. 
+Jos jednom da ponovimo upis u registarsku banku se vrsi na opadajucu ivicu takta, a citanje na rastucu!!!
+
+Ono na sta mora da se obraca paznja jesu kontroli signali kroz koje smo prosli, koji su generisani u control path celini. Neki od njih moraju da idu duze kroz faze protocne obrade i da se iskoriste u onom trenutku protocne obrade u kome vrse kontrolu. 
+	1. ID - branch
+	2. EXE - alu_src_b, alu_2bit_op
+	3. MEM - data_mem_we
+	4. WB - rd_we_mem, mem_to_reg
+Bitno je da funtc3,funct7 isto usporimo za jedan takt, kada dolazi u EXE fazu i ide u blok alu_decoder. 
+Ovim smo ubacili i protocnu obradu u controlpath celinu, moze da se uradi na dva nacina, mozda je laksi nacin da se postavi da bude odvojeno control path od data path-a zbog interfejsa i njegovog 
+komplikovanja. 
+
+************ Hazardi u protocnoj obradi **************************************************************
+Problemi koji nastaju su zavisnost izmedju instrukcija koje se nalaze unutar protocne obrade.
+***Hazardi R tipa***
+	sub x2,x1,x3
+	and x11,x2,x5
+
+Jedan od nacina da se razresi ovaj problem jeste da se saceka da sub instrukcija azurira vrednost registra x2 i tek onda da se nastavi sa izvrsavanjem ostalih instrukcija.
+Resenje 1. 
+	sub x2, x1, x3
+	nop
+	nop  
+	and x11,x2,x5
+
+Drugi nacin da se resi ovaj problem jeste implementiranje jedinice za prosledjivanje podatka (forwarding unit). Ukoliko se desi hazard podataka, odnosno jedna instrukcija 
+zavisi od rezultata prethodne, ideja je da jedinica za prosledjivanje podataka prosledi rezultat izvrsavanja prethodne instrukcije u trenutku kada je taj rezultat potreban trenutnoj instrukciji.
+
+*********** 1. Komponenta - forwarding unit ****************************
+Uloga je da zakljuci da li postoji zavisnost izmedju insrukcija koje se nalaze u fazama protocne obrade. Kako bi to uradila neophodne su joj sledece informacije:
+
+1. Adrese registara koji su potrebni instrukciji u EXE fazi. Sa njihovim vrednostima ALU izvrsava operaciju shodono prihvacenoj instrukciji.
+2. Adrese odredisnog registra instrukcije iz MEM faze.
+3. Signal dozvole upisa u registarsku banku rd_we instrukcije MEM faze.
+4. Adresu odredisnog registra instrukcije iz WB faze.
+5. Signal dozvole upisa u registarsku banku rd_we instrukcije iz WB faze. 
+
+3. i 4. stavka su neophodne da bi se zakljucilo da li instrukcije u MEM i WB fazi uopste vrse upisivanje u registarsku banku, jer ukoliko ne vrse upis, nema zavisnosti izmedju instrukcija i prosledjivanje nije neophodno. Ukoliko su signali iz 3. i 4. stavke na visokom nivou, odnosno instrukcije u MEM i WB fazi vrse upis u registarsku banku, potrebno je jos uporediti da li su registi rs1 i
+rs2, koji su neophodni instrukciji u EX fazi jednaki sa registrom rd u koji upisuju instrukcije u MEM i WB fazi. Ukoliko su jednaki, jedinica za prosledjivanje podataka ce generisati kontrolne
+signale koji selektuju sta ce se proslediti ALU jedinici. 
+Ti kontrolni signali su oznaceni kao alu_forward_a i alu_forward_b. To su dva dvobitna signala koji su dovedeni na selekcione ulaze mux-a. 
+Sta koja vrednost prosledjuje 
+"00" -> nema zavisnosti izmedju instrukcija 
+"01" -> postoji zavisnost neophodno je propustiti rezultat iz WB faze
+"10" -> postoji zavisnost neophodno je propustiti rezultat iz MEM faze
+!!! BITNO - MEM faza ima priorite u odnosu na WB fazu !!! -> razlog ima sveziju informaciju o trazenom registru. 
+
+*** Hazardi uslovnog skoka ***
+
+Potrebno je prosiriti forward unit sa dva signala rs1_addr_id i rs2_addr_id i napraviti dva izlaza branch_forward_a i branch_forward_b. 
+
+*** Hazardi podataka i zadrzavanje procesora ***
+
+Za neke hazarde podatka prosledjivanje nije dovoljno i tada je neophodno izvrsiti zadrzavanje procesora. 
+
+*** 2. Komponenta - hazard unit***
+Hazard unit komponenta zaustavlja prihvat novih instrukcija pomocu tri kontrolna signala: pc_en, if_id_en, controll_pass. 
+Prvi kontrolise pc registar, ako je on na niskoj vrednosti ostaje adresa memorije ista. Drugi kontrolise if_id_reg i ukoliko je on na niskoj vrednosti instrukcija iz IF faze 
+ne moze biti propustena u ID fazu. Controll_pass resetuje ID_EX_reg u control path celini, odnosno resetuje sve kontrolne signale u EXE fazi sto je ekvivalentno nop instrukciji.
+Ovako zadrzavamo instrukciju u ID fazi.
+Objasnjenje rada hazara unit-a.
+
+*** Upravljacki hazardi ***
+Za upravljacke hazarde hazard unit mora da se prosiri sa tri dodatna ulazna porta:
+
+1. branch_id sadrzi informaciju da li je primljena instrukcija uslovnog skoka. Potreba za ovom informacijom proizilazi iz cinjenice da ukoliko instrukcija 
+u ID fazi nije instrukcija uslovnog skoka, stall ce biti dugacak maksimalno 1 takt, a u suprotnom ce mozda biti dva. 
+2. rd_address_mem, sadrzi informaciju o tome kom registru pristupa instrukcija koja se nalazi u mem fazi. 
+3. mem_to_reg_mem govori da li instrukcija u MEM fazi vrsi citanje iz memorije za podatke i smesta citanja u registarsku banku. 
+
+
+
+****************************************** 
+Ready signal iz mnozenja i deljenja i dodatni signal se izvlaci iz Alu_decodera. Taj signal je 0 kada je mnozenje i deljenje u ostalim slucajevima je signal 1. 
+Oni se zajedno spajaju na ILI kolo, ciji se izlaz dovodi na enable od PC i IF/ID registra.
+

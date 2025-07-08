@@ -1,0 +1,1262 @@
+\documentclass{scrreprt}
+\usepackage{graphicx} % Required for inserting images
+
+\title{RV32IMF Description}
+\author{Milos Strizak}
+\date{October 2023}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+\tableofcontents
+\listoffigures
+\listoftables
+
+
+\addcontentsline{toc}{section}{Introduction}
+\newpage
+
+\section*{Introduction}
+\addcontentsline{toc}{subsection}{Scope}
+\subsection*{Scope}
+This document represents Implementation of RISC-V processor. It describes building blocks and their 
+connection and how together they work. It also covers the type of instructions that are implemented.
+\addcontentsline{toc}{subsection}{Document overview}
+\subsection*{Document overview}
+This document is composed of following items:
+\begin{itemize}
+    \item RISC-V ISA overview
+    \item What type of instruction this implementation covers, how is each instruction decoded.
+    \item Description of each unit in Data/Control path and connection between them.
+    \item Interface description. 
+\end{itemize}
+
+\addcontentsline{toc}{section}{RISC-V ISA}
+\newpage
+\section*{RISC-V ISA}
+    \addcontentsline{toc}{subsection}{Overview}
+    \subsection*{Overview}
+    - Instruction set architecture describe how processor works and what are processors capabilities. In ISA it is fully described how many registers has and all instructions it contains. Each instruction is fully described how it works and the way it's coded. ISA represents bridge between HW and SW. 
+    - RISC-V is open-source ISA that uses different ideas form different architectures and combines them in one for getting the best results. Good side of this is also capability to make processor only for your needs, you can implement only instructions you need. 
+    - Questions needed to be answered are next:
+    \begin{itemize}
+        \item Width of registers - 32 bit.
+        \item How much registers processors contains - 32 registers
+        \item Instruction width - 32 bit.
+        \item Type of instructions implemented - I-type and M-type. 
+    \end{itemize}
+    There is convention for RISC-V set instruction. Every set begins with letters RV followed with width of registers:
+    \begin{itemize}
+        \item  RV32 - 32-bit processor
+        \item  RV64 - 64-bit processor
+        \item  RV128 - 128-bit processor
+    \end{itemize}
+    After width of registers it goes set of instructions that are implemented in design, this is represented in next table:
+    
+    \begin{table}[htb!]
+        \centering
+        \begin{tabular}{|c|c|c|} \hline 
+             n & Set of instructions & Description \\ \hline 
+             1. &  I-set & Base set of instruction to work with integer data \\ \hline 
+             2. &  M-set & Multiply/divide integer data \\ \hline 
+             3. &  A-set &  Atomic operations \\ \hline 
+             4. &  F-set &   Floating point number operations, single precision\\ \hline 
+             5. &  D-set &  Floating point number operations, double precision\\ \hline 
+             6. &  S-set &  Supervisor mode\\ \hline 
+             7. &  C-set &  Compressed instruction \\ \hline 
+             8. &  E-set &  Embedded microprocessor, number of register 16 \\\hline 
+             9. &  L-set &   Decimal arithmetic \\ \hline 
+             10. &  V-set &  Vector instructions \\ \hline 
+             11. &  P-set &  Packaging SIMD instruction\\ \hline 
+             12. &  B-set &  Operation to manipulate bits \\ \hline 
+             13. &  T-set &  Support for transaction memory model \\\hline 
+             14. &  J-set &  Support for dynamic translate of instructions \\ \hline 
+             15. &  N-set &  Support for interrupts on user level  \\\hline 
+             
+        \end{tabular}
+        \caption{Set of instructions in RISC-V}
+        \label{tab:table1}
+    \end{table}
+    \addcontentsline{toc}{subsection}{Format of instructions}
+    \newpage
+    \subsection*{Format of instructions}
+        Most of standard processor contain first five sets in there implementation. For example,if we have 32bit processor, this can be represented as RV32IMAFD. Because this is not readable convention is to write this as RV32G. 
+        When we try to represent some instruction, we know that every instruction doesn't contain same number of operand. For example, instruction for add contains two operands, and some load instruction contains one operand and some constant value. From this case we can understand that representation of instruction is not the same in all cases. Therefore in RISC-V in I-type of instructions we have basic types of formats. In next table they are represented:
+    
+      \begin{table}[ht]
+          \centering
+          \begin{tabular}{|c|c|c|c|c|c|c|} \hline  
+               funct7 & rs2 & rs1 & funct3 & rd & opcode & R-type\\ \hline  
+               \multicolumn{2}{|c|}{imm[11:0]} & rs1 & funct3 & rd & opcode & I-type \\ \hline  
+               imm[11:5] & rs2 & rs1 & funct3 & imm[4:0] & opcode &  S-type\\ \hline  
+               imm[12| 10:5]& rs2 & rs1 & funct3 & imm[4:1|11] & opcode &  B-type\\ \hline  
+               \multicolumn{4}{|c|}{imm[31:12]}  & rd & opcode &  U-type\\ \hline  
+               \multicolumn{4}{|c|}{imm[20|10:1|11|19:12]} & rd & opcode &  J-type\\ \hline 
+          \end{tabular}
+          \caption{Format of RV32I instructions}
+          \label{tab:table2}
+      \end{table}  
+
+    Fields in Table 2 are described in next section.
+     \begin{itemize}
+        \item  opcode - operation code, width 7-bits.
+        \item  funct3 - additional 3 bits for opcode, to define the instructions in more detail.
+        \item  funct7 - additional 7 bits for opcode, to define the instructions in more detail.
+        \item  rs1 - first operand
+        \item  rs2 - second operand.
+        \item  rd - result register
+        \item  imm - immediate, constant filed
+    \end{itemize}
+    \addcontentsline{toc}{subsection}{Register in RV32}
+    \subsection*{Register in RV32}
+    In processor there is 32 general purpose register, each 32 bit wide. They are represented as x0-x31. Register x0 is hardwired with all bits equal to 0. General purpose registers x1-x31 hold values that various instructions interpret as a collection of Boolean values, or as two's complement signed binary or unsigned binary integers. 
+    There is one additional unprivileged register: the program counter pc holds the address of the
+current instruction.
+    
+    \begin{table}[ht]
+        \centering
+        \begin{tabular}{|c|c|c|c|} \hline 
+            Name & Register number & Usage & Preserved on call\\ \hline 
+            x0 & 0 & Constant value 0 & n.a\\ \hline 
+            x1 (ra) & 1 & Return address & yes\\ \hline 
+            x2 (sp) & 2 & Stack pointer & yes\\ \hline 
+            x3 (gp) & 3 & Global pointer & yes\\ \hline 
+            x4 (tp) & 4 & Thread pointer & yes\\ \hline 
+            x5-x7 & 5-7 & Temporaries & no \\ \hline 
+            x8-x9 & 8-9 & Saved & yes\\ \hline 
+            x10-x17 & 10-17 & Arguments/result & no\\ \hline 
+            x18-x27 & 18-27 & Saved & yes\\ \hline 
+            x28-x31 & 28-31 & Temporaries & no\\ \hline
+        \end{tabular}
+        \caption{RISC-V registers}
+        \label{tab:table3}
+    \end{table}
+
+    Even though registers are general purpose, it's decided that register x1 is return address register and is used for instructions like JAR and JALR ( \textit{further explained lather on}). Each program needs to save value stack pointer for proper execution of instructions push and pop. For this purpose it's reserved register x2, and his value is initialized on start of execution on appropriate value in memory representing top of the stack. Register x4 represents global pointer and is used to point to static variables in program. Register x5 is used to memories thread that is executed. Registers x5-x7 and x28-x31 are used for local variables that are not going to be saved, therefore they have spacial name \textit{temporary t0-t6}. Registers x8-x9 and x18-x27 are used for local variables that are going to be saved in call of the procedure, therefore have name \textit{saved s0-s11}. Last group are register x10-x17 and they are used to send arguments to procedure and for return value after executing the same.  
+
+    \addcontentsline{toc}{subsection}{RV32I-type of instructions}
+    \subsection*{RV32I-type of instructions}
+    In this subsection is described all instruction in I-set. They are sorted in groups, depending on format of instruction they represent. There is 47 instructions in this set, they are divided in 6 types: 
+    \begin{enumerate}
+        \item  R-type: register-register
+        \item  I-type: short immediates and loads
+        \item  S-type: stores
+        \item  B-type: conditional branches, a variation of S-type
+        \item  U-type: long immediates
+        \item  J-type: unconditional jumps, a variation of U-type
+    \end{enumerate}
+    In R-type of instructions we have arithmetic and logic instructions. Instructions are:
+    \begin{enumerate}
+        \item ADD - Addition of two operands. 
+        \item SUB - Subtraction of two operands. 
+        \item SLL - Shift left logical. 
+        \item SLT - Shift lest than. 
+        \item SLTU - Shift lest than unsigned. 
+        \item XOR - XOR logical operation. 
+        \item SRL - Shift right logical. 
+        \item SRA - Shift right arithmetic. 
+        \item OR - OR logical operation. 
+        \item AND - AND logical operation.
+    \end{enumerate}
+    \hfill \break
+    In S-type instruction we have instructions for locating values in memory ( store). There are three instructions with this type:
+    \begin{enumerate}
+        \item SB - Lowest 8 bits register rs2 is stored on address rs1+imm. 
+        \item SH - Lower 16 bits register rs2 is stored on address rs1+imm. 
+        \item SW - Value of register rs2 is stored on address rs1+imm. 
+    \end{enumerate}
+
+    \hfill \break
+    There is six types of conditional branches, they are all B-type of instructions. There expalnation is next:
+    \begin{enumerate}
+        \item BEQ - Branch if equal, PC gets value PC+imm if value of register rs1 is equal to value of register rs2, otherwise PC gets PC+4 (next instruction). 
+        \item BNE - Branch if not equal, PC get value PC+imm if value of register rs1 is not equal to value of register rs2, otherwise PC gets PC+4. 
+        \item BLT - Branch if less then, PC get value PC+imm if value of register rs1 is lower than value of register rs2, otherwise PC gets PC+4. Values of registers are interpreted in complement 2's.
+        \item BGE - Branch if greater or equal, PC get value PC+imm if value of register rs1 is greater or equal than value of register rs2, otherwise PC gets PC+4. Values of registers are interpreted in complement 2's. 
+        \item BLTU - Branch if less then unsigned, PC get value PC+imm if value of register rs1 is lower than value of register rs2, otherwise PC gets PC+4. Values of registers are interpreted in unsigned format. 
+        \item BGEU - Branch if greater or equal unsigned, PC get value PC+imm if value of register rs1 is greater or equal than value of register rs2, otherwise PC gets PC+4. Values of registers are interpreted in unsigned format.
+    \end{enumerate}
+
+    I-type of instructions we have two groups, load and arithmetic and logic operations with immediate operand. Load instructions we have five and they represent getting data from memory to registers in processor. 
+    \hfill \break
+    \begin{enumerate}
+        \item LW - Load word, from address rs1+imm in memory we take 32bit value and place it in rd register.
+        \item LH - Load halfword, from address rs1+imm in memory we take 16bit value and expand it to 32 bit and place it in rd register. Expanding is done with replication of 15th bit, this is done to save sign of the value.
+        \item LHU - Load halfword unsigned, from address rs1+imm in memory we take 16bit value and expand it to 32 bit and place it in rd register. Expanding is done puting all zeros on upper 16bits.
+        \item LB - Load byte, from address rs1+imm in memory we take 8bit value and expand it to 32 bit and place it in rd register. Expanding is done with replication of 7th bit, this is done to save sign of the value. 
+        \item LBU - Load byte unsigned, from address rs1+imm in memory we take 8bit value and expand it to 32 bit and place it in rd register. Expanding is done puting all zeros on upper 24bits. 
+    \end{enumerate}
+
+    I-type of arithmetic and logic instructions we have nine, explanation for them is:
+
+    \begin{enumerate}
+        \item ADDI - Addition with constant.  
+        \item SLLI - Shift left for constant. 
+        \item SLTI - Shift lest than, done with constant. 
+        \item SLTIU - Shift lest than unsigned, done with constant. 
+        \item XORI - XOR logical operation, done with constant. 
+        \item SRLI - Shift right logical, done with constant. 
+        \item SRAI - Shift right arithmetic, done with constant. 
+        \item ORI - OR logical operation, done with constant. 
+        \item ANDI - AND logical operation, done with constant.
+    \end{enumerate}
+
+    Next are instructions for unconditional jump, they are J-type of instructions. There are used for call of procedure or functions in some code. Two instructions are JAL and JALR.
+    \textit{JAL} - jump and link used for "call procedure". This instruction executes two things. Value PC+4 is written in rd register, after that PC gets value from immediate field. Register rd is the one where is gonna be sent return address. 
+    \textit{JALR} - jump and link register used for "return from procedure". In rd register is written value PC+4, after that PC gets value rs1+imm. If this is used for return from procedure, imm field is set to zero, and rs1 register is the one where is set return address from JAL instruction. 
+    
+    \hfill \break
+    There is need to have some instructions that are gonna work with some big numbers. U-type of instructions work with them, constant field for them is set to 20bits. Instructions are next, they go together, one with another:
+    \textit{LUI} - load upper immediate - on upper 20bit destination register rd is set value from immediate field, lower 12bit is set to zero. 
+    The same problem is with call of procedure, what to do if they are out of range of JAL instruction. In this case we have instruction:
+    \textit{AUIPC} - add upper immediate to PC, first is made 32bit value by  20bit imm field and 12bit of zeros, this value is added with value of PC, and result is put to rd register. This instruction is used for PC-relative addressing in memory.   
+
+    \textbf{In this section needs to be added 10 more instructions,four instructions FENCE, FENCE.I, ECALL and EBREAK, and 6 instructions for control and status register CSR.}
+    
+    In next table we can see how this instructions are coded.       
+    \begin{table}[htb!]
+        \centering
+        \begin{tabular}{|c|c|c|c|c|c|c|} \hline 
+             Instr. & funct7 & rs2 & rs1 & funct3 & rd & opcode\\ \hline 
+             ADD & 0b0000000 & rs2 & rs1 & 0b000 & rd & 0b0110011\\ \hline 
+             SUB & 0b0100000 & rs2 & rs1 & 0b000 & rd & 0b0110011\\ \hline 
+             SLL & 0b0000000 & rs2 & rs1 & 0b001 & rd & 0b0110011\\ \hline 
+             SLT & 0b0000000 & rs2 & rs1 & 0b010 & rd & 0b0110011\\ \hline 
+             SLTU & 0b0000000 & rs2 & rs1 & 0b011 & rd & 0b0110011\\ \hline 
+             XOR & 0b0000000 & rs2 & rs1 & 0b100 & rd & 0b0110011\\ \hline 
+             SRL & 0b0000000 & rs2 & rs1 & 0b101 & rd & 0b0110011\\ \hline 
+             SRA & 0b0100000 & rs2 & rs1 & 0b101 & rd & 0b0110011 \\ \hline 
+             OR & 0b0000000 & rs2 & rs1 & 0b110 & rd & 0b0110011\\ \hline 
+             AND & 0b0000000 & rs2 & rs1 & 0b111 & rd & 0b0110011\\ \hline
+             SB & imm[11:5] & rs2 & rs1 & 0b000 & imm[4:0] & 0b0100011\\ \hline 
+             SH & imm[11:5] & rs2 & rs1 & 0b001 & imm[4:0] & 0b0100011\\ \hline 
+             SW & imm[11:5] & rs2 & rs1 & 0b010 & imm[4:0] & 0b0100011\\ \hline
+             BEQ & imm[12;10:5] & rs2 & rs1 & 0b000 & imm[4:1;11] & 0b1100011\\ \hline 
+             BNE & imm[12;10:5] & rs2 & rs1 & 0b001 & imm[4:1;11] & 0b1100011\\ \hline 
+             BLT & imm[12;10:5] & rs2 & rs1 & 0b100 & imm[4:1;11] & 0b1100011\\ \hline
+             BGE & imm[12;10:5] & rs2 & rs1 & 0b101 & imm[4:1;11] & 0b1100011\\ \hline 
+             BLTU & imm[12;10:5] & rs2 & rs1 & 0b110 & imm[4:1;11] & 0b1100011\\ \hline 
+             BGEU & imm[12;10:5] & rs2 & rs1 & 0b111 & imm[4:1;11] & 0b1100011\\ \hline
+             ADDI & \multicolumn{2}{c|}{imm[11:0]} & rs1 & 0b000 & rd & 0b0010011\\ \hline 
+             SLTI &  \multicolumn{2}{c|}{imm[11:0]} & rs1 & 0b010 & rd & 0b0010011\\ \hline 
+             SLTIU & \multicolumn{2}{c|}{imm[11:0]} & rs1 & 0b011 & rd & 0b0010011\\ \hline 
+             XORI &  \multicolumn{2}{c|}{imm[11:0]} & rs1 & 0b100 & rd & 0b0010011\\ \hline 
+             ORI & \multicolumn{2}{c|}{imm[11:0]} & rs1 & 0b110 & rd & 0b0010011\\ \hline 
+             ANDI &  \multicolumn{2}{c|}{imm[11:0]}& rs1 & 0b111 & rd & 0b0010011\\ \hline
+             SRLI & 0b000000X & shamt & rs1 & 0b101 & rd & 0b0010011\\ \hline 
+             SRAI & 0b010000X & shamt & rs1 & 0b101 & rd & 0b0010011 \\ \hline 
+             SLLI & 0b000000X & shamt & rs1 & 0b001 & rd & 0b0010011\\ \hline
+             LB & \multicolumn{2}{c|}{imm[11:0]} & rs1 & 0b000 & rd & 0b0000011\\ \hline 
+             LH &  \multicolumn{2}{c|}{imm[11:0]} & rs1 & 0b001 & rd & 0b0000011\\ \hline 
+             LW & \multicolumn{2}{c|}{imm[11:0]} & rs1 & 0b010 & rd & 0b0000011\\ \hline 
+             LBU &  \multicolumn{2}{c|}{imm[11:0]} & rs1 & 0b100 & rd & 0b0000011\\ \hline 
+             LHU & \multicolumn{2}{c|}{imm[11:0]} & rs1 & 0b101 & rd & 0b0000011\\ \hline
+             JAL & \multicolumn{4}{c|}{imm[20;10:1;11;19:12]}& rd & 0b1101111\\ \hline
+             JALR & \multicolumn{2}{c|}{imm[11:0]} & rs1 & 0b000 & rd & 0b1100111\\ \hline
+             AUIPC & \multicolumn{4}{c|}{imm[31:12]}& rd & 0b0010111\\ \hline
+             LUI & \multicolumn{4}{c|}{imm[31:12]} & rd & 0b0110111\\ \hline
+        \end{tabular}
+        \caption{RV32I instructions}
+        \label{tab:table}
+    \end{table}
+    \newline
+\hfill \break
+\hfill \break
+\hfill \break
+\hfill \break
+\hfill \break
+
+\addcontentsline{toc}{subsection}{RV32M-type of instructions}
+\newpage
+\subsection*{RV32M-type of instructions}
+This section describes the standard integer multiplication and division instruction extension, which
+is named “M” and contains instructions that multiply or divide values held in two integer registers.
+There is only 8 instruction in this group. Four of them are for multiplication and four is for division and remainder. All of them are R-type of instructions. 
+\hfill \break
+Descriptions of this instructions are:
+\begin{enumerate}
+        \item MUL - Multiply rs1 and rs2 and lower 32bit place in rd register.  
+        \item MULH - Multiply rs1 and rs2 and upper 32bit place in rd register. 
+        \item MULHSU - Multiply signed rs1 and unsigned rs2 and upper 32bit place in rd register. 
+        \item MULHU - Multiply unsigned rs1 and unsigned rs2 and upper 32bit place in rd register.
+        \item DIV - Divide signed. 
+        \item DIVU - Divide unsigned. 
+        \item REM - Remainder signed. 
+        \item REMU - Remainder unsigned. 
+\end{enumerate}
+
+How this instructions are encoded is represented in next table:
+\begin{table}[htb!]
+        \centering
+        \begin{tabular}{|c|c|c|c|c|c|c|} \hline 
+             Instr. & funct7 & rs2 & rs1 & funct3 & rd & opcode\\ \hline 
+             MUL & 0b0000001 & rs2 & rs1 & 0b000 & rd & 0b0110011\\ \hline 
+             MULH & 0b0100001 & rs2 & rs1 & 0b001 & rd & 0b0110011\\ \hline 
+             MULHSU & 0b0000001 & rs2 & rs1 & 0b010 & rd & 0b0110011\\ \hline 
+             MULHU & 0b0000001 & rs2 & rs1 & 0b011 & rd & 0b0110011\\ \hline 
+             DIV & 0b0000001 & rs2 & rs1 & 0b100 & rd & 0b0110011\\ \hline 
+             DIVU & 0b0000001 & rs2 & rs1 & 0b101 & rd & 0b0110011\\ \hline 
+             REM & 0b0000001 & rs2 & rs1 & 0b110 & rd & 0b0110011\\ \hline 
+             REMU & 0b0100001 & rs2 & rs1 & 0b111 & rd & 0b0110011 \\ \hline  
+        \end{tabular}
+        \caption{RV32M instructions}
+        \label{tab:tableRV32M}
+    \end{table}
+
+\addcontentsline{toc}{subsection}{RV32F-type of instructions}
+\newpage
+\subsection*{RV32F-type of instructions}
+This chapter describes the standard instruction-set extension for single-precision floating-point, which is named “F” and adds single-precision floating-point computational instructions compliant with the IEEE 754-2008 arithmetic standard. The F extension depends on the “Zicsr” extension for control and status register access.
+The F extension adds 32 floating-point registers, f0–f31, each 32 bits wide, and a floating-point control and status register fcsr, which contains the operating mode and exception status of the floating-point unit.
+In each instruction that works with float point value there is two bit format field \textit{fmt} that is encoded as shown in table. It is set to S (00) for all instructions in the F extension.
+ \begin{table}[htb!]
+        \centering
+        \begin{tabular}{|c|c|c|} \hline 
+            fmt field & Mnemonic & Meaning \\ \hline 
+            00 & S & 32-bit single-precision 0 \\ \hline 
+            01 & D & 64-bit double-precision \\ \hline 
+            10 & H & 16-bit half-precision \\ \hline 
+            11 & Q & 128-bit quad-precision \\ \hline  
+        \end{tabular}
+        \caption{Fmt field encoded}
+        \label{tab:fmt}
+    \end{table}
+\newline
+There is 26 different instructions in this extension. Two of them use one register with immediate filed, that are load and store operations. They are also I-type and S-type of format. Four instructions are using three operands and that is different from previous sets. There are also computational instructions, move instructions, compare instructions and classify instructions. Descriptions of this instructions is:
+\begin{enumerate}
+        \item FMADD - Perform single-precision fused multiply addition. 
+        \item FMSUB - Perform single-precision fused multiply subtraction. 
+        \item FNMSUB - Perform single-precision fused negative multiply subtraction. 
+        \item FNMADD - Perform single-precision fused negative multiply addition. 
+        \item FADD -  Perform single-precision floating-point addition.
+        \item FSUB - Perform single-precision floating-point subtraction.
+        \item FMUL - Perform single-precision floating-point multiplication. 
+        \item FDIV - Perform single-precision floating-point division.
+        \item FSQRT - Perform single-precision square root.
+        \item FSGNJ - Produce a result that takes all bits except the sign bit from rs1.The result’s sign bit is rs2’s sign bit.
+        \item FSGNJN - Produce a result that takes all bits except the sign bit from rs1. The result’s sign bit is opposite of rs2’s sign bit.
+        \item FSGNJX - Produce a result that takes all bits except the sign bit from rs1. The result’s sign bit is XOR of sign bit of rs1 and rs2.
+        \item FMIN - Write the smaller of single precision data in rs1 and rs2 to rd.
+        \item FMAX - Write the larger of single precision data in rs1 and rs2 to rd.
+        \item FCVT.W - Convert a floating-point number in floating-point register rs1 to signed 32-bit in integer register rd.
+        \item FCVT.WU - Convert a floating-point number in floating-point register rs1 to a signed 32-bit in unsigned integer register rd.
+        \item FMV.X.W - Move the single-precision value in floating-point register rs1 represented in IEEE 754-2008 encoding to the lower 32 bits of integer register rd.
+        \item FEQ - Performs a quiet equal comparison between floating-point registers rs1 and rs2 and record the Boolean result in integer register rd. Only signaling NaN inputs cause an Invalid Operation exception. The result is 0 if either operand is NaN.
+        \item FLTS - Performs a quiet less comparison between floating-point registers rs1 and rs2 and record the Boolean result in integer register rd. Only signaling NaN inputs cause an Invalid Operation exception. The result is 0 if either operand is NaN.
+        \item FLE - Performs a quiet less or equal comparison between floating-point registers rs1 and rs2 and record the Boolean result in integer register rd. Only signaling NaN inputs cause an Invalid Operation exception. The result is 0 if either operand is NaN.
+        \item FCLASS - Examines the value in floating-point register rs1 and writes to integer register rd a 10-bit mask that indicates the class of the floating-point number. The format of the mask is described in [classify table].The corresponding bit in rd will be set if the property is true and clear otherwise. All other bits in rd are cleared. Note that exactly one bit in rd will be set.
+        \item FCVT.S.W - Converts a 32-bit signed integer, in integer register rs1 into a floating-point number in floating-point register rd.
+        \item FCVT.S.WU - Converts a 32-bit unsigned integer, in integer register rs1 into a floating-point number in floating-point register rd.
+        \item FMV.W.X - Move the single-precision value encoded in IEEE 754-2008 standard encoding from the lower 32 bits of integer register rs1 to the floating-point register rd.
+        \item FLW - Load a single-precision floating-point value from memory into floating-point register rd.
+        \item FSW - Store a single-precision value from floating-point register rs2 to memory.
+\end{enumerate}
+\newpage
+How this instructions are encoded is represented in next table:
+\begin{table}[htb!]
+        \centering
+        \begin{tabular}{|c|c|c|c|c|c|c|c|} \hline 
+             Instr. & funct5 & fmt & rs2 & rs1 & funct3 & rd & opcode\\ \hline 
+             FMADD & rs3 & 00 & rs2 & rs1 & rm & rd & 0b1000011\\ \hline 
+             FMSUB & rs3 & 00 & rs2 & rs1 & rm & rd & 0b1000111\\ \hline 
+             FNMSUB & rs3 & 00 & rs2 & rs1 & rm & rd & 0b1001011\\ \hline 
+             FNMADD & rs3 & 00 & rs2 & rs1 & rm & rd & 0b1001111\\ \hline 
+             FADD & 0b00000 & 00 & rs2 & rs1 & rm & rd & 0b1010011\\ \hline 
+             FSUB & 0b00001 & 00 & rs2 & rs1 & rm & rd & 0b1010011\\ \hline 
+             FMUL & 0b00010 & 00 & rs2 & rs1 & rm & rd & 0b1010011\\ \hline 
+             FDIV & 0b00011 & 00 & rs2 & rs1 & rm & rd & 0b1010011 \\ \hline 
+             FSQRT & 0b01011 & 00 & 0b00000 & rs1 & rm & rd & 0b1010011\\ \hline 
+             FSGNJ & 0b00100 & 00 & rs2 & rs1 & 000 & rd & 0b1010011\\ \hline 
+             FSGNJN & 0b00100 & 00 & rs2 & rs1 & 001 & rd & 0b1010011\\ \hline 
+             FSGNJX & 0b00100 & 00 & rs2 & rs1 & 010 & rd & 0b1010011 \\ \hline 
+             FMIN & 0b00101 & 00 & rs2 & rs1 & 000 & rd & 0b1010011\\ \hline 
+             FMAX & 0b00101 & 00 & rs2 & rs1 & 001 & rd & 0b1010011\\ \hline 
+             FCVT.W & 0b11000 & 00 & 0b00000 & rs1 & rm & rd & 0b1010011\\ \hline 
+             FCVT.WU & 0b11000 & 00 & 0b00001 & rs1 & rm & rd & 0b1010011 \\ \hline 
+             FMV.X.W & 0b11100 & 00 & 0b00000 & rs1 & 000 & rd & 0b1010011\\ \hline 
+             FEQ & 0b10100 & 00 & rs2 & rs1 & 010 & rd & 0b1010011\\ \hline 
+             FLTS & 0b10100 & 00 & rs2 & rs1 & 001 & rd & 0b1010011\\ \hline 
+             FLE & 0b10100 & 00 & rs2 & rs1 & 000 & rd & 0b1010011 \\ \hline 
+             FCLASS & 0b11100 & 00 & 0b00000 & rs1 & 001 & rd & 0b1010011\\ \hline 
+             FCVT.S.W & 0b11010 & 00 & 0b00000 & rs1 & rm & rd & 0b1010011\\ \hline 
+             FCVT.S.WU & 0b11010 & 00 & 0b00001 & rs1 & rm & rd & 0b1010011\\ \hline 
+             FMV.W.X & 0b11110 & 00 & 0b00000 & rs1 & rm & rd & 0b1010011 \\ \hline 
+             FLW & \multicolumn{3}{c|}{imm[11:0]} & rs1 & 010 & rd & 0b0000111\\ \hline 
+             FSW & \multicolumn{2}{c|}{imm[11:5]} & rs2 & rs1 & 010 & imm[4:0] & 0b0100111 \\ \hline 
+        \end{tabular}
+        \caption{RV32F instructions}
+        \label{tab:tableRV32F}
+    \end{table}
+\addcontentsline{toc}{section}{Flow of implementation}
+\newpage
+\section*{Flow of implementation}
+
+This project represents implementation of 5-stage pipelined RV32IM processor. For purpose of better explanation flow of implementation is separated to stages. Processor contains two main part: \textit{datapath and controlpath}. Datapath is made of primary components needed for execution of instructions, each of this component is explained separately. Controlpath represents logic for control of datapath. First we explain system without pipeline, after implementation it is going to be explain why is better if system pipelined, and all problems that provides. 
+
+First thing needed to be described is memory for instruction. This memory has asynchronous read and it contains program needed to be executed. Which instruction is going to be executed depends on PC. PC generates value of next instruction. On image we can see we have adder, that is incremented with 4, that is because instructions length is 32bit, that is 4 locations. 
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.5\linewidth]{PC.png}
+    \caption{PC with instruction memory}
+    \label{fig:enter-label}
+\end{figure}
+\hfill \break
+
+After implementing logic for fetching instructions, we can expand implementation buy adding part of instruction decode, and instruction execution. In datapath instruction decode is done in register bank, and execution is done in arithmetic-logic unit (ALU). 
+
+\begin{figure}[htb!]
+    \centering
+    \includegraphics[width=1\linewidth]{REGandALU.png}
+    \caption{Adding register bank and ALU in datapath}
+    \label{fig:regandalu}
+\end{figure}
+\addcontentsline{toc}{subsection}{Register bank}
+\newpage
+\subsection*{Register bank}
+
+Register bank contains 32 registers with width 32bit. Communication with register bank is trough two interface for read and one for write. Reason for this type is because of format of instructions. For example, if we take R-type of instructions, they have three locations they access in the same time, two need to be read and one is written too. 
+Interface description: 
+    \begin{table}[ht]
+        \centering
+        \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             rs1-address & input & Input address from witch data is read. \\ \hline  
+             rs2-address & input & Input address from witch data is read.  \\ \hline
+             rs1-data & output & Data on output from rs1-address address. \\ \hline
+             rs2-data & output & Data on output from rs2-address address. \\ \hline
+             rd-address & input & Input address to witch data is written.  \\ \hline
+             rd-address & input & Data written to rd-address position.  \\ \hline
+             rd-we & input & Write enable signal giving permission to write data in register bank.  \\ \hline
+        \end{tabular}
+        \caption{Register bank interface}
+        \label{tab:Reg interface}
+    \end{table}
+    \hfill \break
+Reading data from register bank is done asynchronously and writing data is done synchronously. 
+\addcontentsline{toc}{subsection}{ALU}
+\subsection*{ALU}
+Artihmetic logic unit, executes arithmetic and logic operations. Interface description:
+\begin{table}[ht]
+        \centering
+        \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             a-i & input & First operand in operation. \\ \hline  
+             b-i & input & Second operand in operation.  \\ \hline
+             alu-op & input & Selection signal telling what instruction is executing. \\ \hline
+             result & output & Result of operation. \\ \hline
+        \end{tabular}
+        \caption{ALU interface}
+        \label{tab:ALU interface}
+    \end{table}
+    \hfill \break
+Alu-op signal is from control path, telling us what operation, we need to execute in present cycle. 
+\addcontentsline{toc}{subsection}{Data memory}
+\subsection*{Data memory}
+For implementation of S-type of instruction, there needs to be implemented data memory. 
+Data memory interface that consist of next ports:
+\begin{table}[ht]
+        \centering
+        \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             data-address & input & Indicates from/to which address is read/write.  \\ \hline  
+             data-i & input & Input port for writing data.  \\ \hline
+             data-o & output & Output port for reading data. \\ \hline
+             data-we & input & Write enable signal indicating if we can write to memory. \\ \hline
+        \end{tabular}
+        \caption{Data interface}
+        \label{tab:Data interface}
+    \end{table}
+    \hfill \break
+Data-address port is connected to result signal of ALU, because it's calculated as add operation (rs1+imm). On data-i input is connected to rs2-data output of register bank. 
+\addcontentsline{toc}{subsection}{Immediate}
+\subsection*{Immediate}
+Immediate component role is to extend immediate from 12bits to 32bits. It extends upper bits with all zeros or ones by looking at 12th bit value and replicating it. This is done to save sign of constant. Extension is necessary because this value needs to be added with rs1 register number, so both value need to be 32bit width.
+\begin{table}[htb!]
+        \centering
+        \begin{tabular}{|c|c|} \hline 
+             "11111111111111111111" & immediate(11:0)  \\ \hline  
+        \end{tabular}
+        \caption{Immediate extended with ones if instruction(31)='1'}
+        \label{tab:Ones interface}
+    \end{table}
+
+\begin{table}[htb!]
+        \centering
+        \begin{tabular}{|c|c|} \hline 
+             "00000000000000000000" & immediate(11:0)  \\ \hline  
+        \end{tabular}
+        \caption{Immediate extended with zeros if instruction(31)='0'}
+        \label{tab:Zeros interface}
+    \end{table}
+    \hfill \break
+Interface description:
+\begin{table}[htb!]
+        \centering
+        \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             instruction & input & Input instruction to understand how to make output.  \\ \hline  
+             immediate-extended & output & Extended immediate filed.  \\ \hline
+        \end{tabular}
+        \caption{Immediate interface}
+        \label{tab:Imm interface}
+    \end{table}
+    \hfill \break
+    \newpage
+For different type of instruction, it's needed to differently concatenate immediate field with extension.
+Next image shows how this component are connected with previous component. There is also one multiplexer 2 on 1, with selection signal from control path alu-src-b, this indicates if we use value rs2 or immediate field. This depends only on type of instruction that needs to be execute. 
+To be able to execute load instructions, there needs to be put one more multiplexer 2 on 1, with selection signal mem-to-reg, indicating if write from ALU or taking data from memory. If signal is set to '0' we are taking result from ALU, otherwise for '1', load instruction is executed. 
+
+
+\begin{figure}[htb!]
+    \centering
+    \includegraphics[width=1\linewidth]{Load.png}
+    \caption{Implemented store and load instructions}
+    \label{fig:Load&Store}
+\end{figure}
+\hfill \break
+\hfill \break
+\hfill \break
+\hfill \break
+\hfill \break
+\hfill \break
+\hfill \break
+\hfill \break
+\hfill \break
+\hfill \break
+\addcontentsline{toc}{subsection}{Implementing conditional jump}
+\subsection*{Implementing conditional jump}
+
+Until now all time PC incremented only for four. Now, with adding conditional jump, PC can be incremented randomly. Rs1 and rs2 field are the one that are checked, and select signal of field funct3 tell what type of conditional jump we are checking. 
+After doing all concatenation and extension of immediate field, it's needed to be added shift left of that value and that is the change of PC. If this value is going to be forwarded to PC input, depends on selection signal on multiplexer 2 on 1. 
+Next image shows extension of datapath, with this is done first step in making RV32IM processor. 
+
+\begin{figure}[htb!]
+    \centering
+    \includegraphics[width=1\linewidth]{Branch.png}
+    \caption{Datapath with branch conditions}
+    \label{fig:branch}
+\end{figure}
+\addcontentsline{toc}{subsection}{Controlpath}
+\subsection*{Controlpath}
+Initial components in controlpath are: Control decoder and ALU decoder. 
+    \addcontentsline{toc}{subsubsection}{ALU decoder}
+    \subsubsection*{ALU decoder}
+        ALU decoder is used to control ALU, it is used to tell what instruction ALU needs to execute. Interface description consist of:
+        \begin{table}[htb!]
+        \centering
+        \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             alu-2bit-op & input & Two bit input comming from control decoder. \\ \hline  
+             funct3 & input & Part of instructions bits 14:12.  \\ \hline
+             funct7 & input & Part of instructions bits 31:25. \\ \hline
+             alu-op & output & Five bit output port to control what is ALU unit executing.  \\ \hline
+        \end{tabular}
+        \caption{ALU decoder interface}
+        \label{tab:ALUdecoder}
+    \end{table}    
+    \addcontentsline{toc}{subsubsection}{Control decoder}
+    \subsubsection*{Control decoder}
+        Control decoder is used to generate control signals for control datapath components. Interface description is:
+         \begin{table}[htb!]
+        \centering
+        \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             opcode & input & Input port we get lower 7 bits from instruction. \\ \hline  
+             branch & output & Control signal set when instruction is B-type.  \\ \hline
+             rd-we & output & Control signal set when load instruction is executed. \\ \hline
+             alu-src-b & output & Control signal set when instruction has immediate field.  \\ \hline
+             data-mem-we & output & Control signal set when instruction is S-type.  \\ \hline
+             mem-to-reg & output & Control signal to know what data we load to register bank.\\ \hline
+             alu-2bit-op & output & Control for ALU decoder to know what instruction to execute. \\\hline
+             rd-mux-o & output & Control signal indicating what type of jump is executed.  \\ \hline
+             load-mux-o & output & Set to '1' when executing AUIPC instruction.  \\ \hline
+             rs1-in-use-o & output & Set to '1' when needed in execution phase.\\ \hline
+             rs2-in-use-o & output & Set to '1' when needed in execution phase.\\ \hline
+        \end{tabular}
+        \caption{Control decoder interface}
+        \label{tab:Controldecoder}
+    \end{table}
+Next image represents controlpath look in system. 
+
+\begin{figure}[htb!]
+    \centering
+    \includegraphics[width=1\linewidth]{Controlpath.png}
+    \caption{Controlpath}
+    \label{fig:Controlpath}
+\end{figure}
+\hfill \break 
+\addcontentsline{toc}{subsection}{Extending to pipeline}
+\subsection*{Extending to pipeline}
+Previous implementation in today processor is inefficient, works on low frequency. Reason for this is every instruction needs one cycle to execute, so the slowest instructions is imposing frequency of hole system. In this particular case load instructions are slowest because it uses five functional units one after other. If you are making processor with low number of instruction then this is optional, but if you want to implement some complex instructions (F-set, D-set, etc.), this implementation is to slow. 
+Because of this reason it's necessary to have pipelined system. 
+    \subsubsection{Basic of pipeline}
+        Pipeline is technique implementation of processor where more instruction is executing at the same time. Most effective explanation is trough example. The pipelined approach takes much less time. As soon as the washer is finished with the first load and placed in the dryer, you load the washer with the second dirty load. When the first load is dry, you place it on the table to start folding, move the wet load to the dryer, and put the next dirty load into the washer.Next, you have your roommate put the first load away, you start folding the second load, the dryer has the third load, and you put the fourth load into the washer. At this point all steps—called stages in pipelining—are operating concurrently. As long as we have separate resources for each stage, we can pipeline the tasks.If all the stages take about the same amount of time and there is enough work to do, then the speed-up due to pipelining is equal to the number of stages in the pipeline, in this case four: washing, drying, folding, and putting away.[1]
+        \begin{figure}[htb!]
+            \centering
+            \includegraphics[width=1\linewidth]{Pipeline.PNG}
+            \caption{Landry analogy for pipelining}
+            \label{fig:Landry analogy for pipelining}
+        \end{figure}
+        \hfill \break
+        \hfill \break
+        \hfill \break
+        The same principles apply to processors where we pipeline instruction execution. RISC-V instructions classically take five steps:
+        \begin{enumerate}
+            \item Fetch instruction from memory.  
+            \item Read registers and decode the instruction. 
+            \item Execute the operation or calculate an address. 
+            \item Access an operand in data memory (if necessary).
+            \item Write the result into a register (if necessary). 
+        \end{enumerate}
+
+        Next image shows how single cycle is extended to five stage pipelined system. By making system pipelined it's necessary for instruction to go trough five stages before finishing. Register separate phases, enabling result of each phase to go trough on rising edge of clock. It's necessary to send instruction trough all phases, because we need to know on what address we need to write. In next section are exposed problem we get by implementing system in pipeline and how we need to change our design to resolve this problems.  
+        \begin{figure}[htb!]
+            \centering
+            \includegraphics[width=1\linewidth]{Pipelinesystem.PNG}
+            \caption{Datapath separated in five stage pipeline}
+            \label{fig:pipeline system}
+        \end{figure}
+        \addcontentsline{toc}{subsection}{Hazard in pipeline}
+        \newpage
+        \subsection*{Hazard in pipeline}
+        \subsubsection*{Data hazard with R-type of instructions}
+            This type of hazard is probably easy to occur. One example we can get is:
+            \begin{figure}[htb!]
+                \centering
+                \includegraphics[width=0.3\linewidth]{datahazard.PNG}
+                \caption{Example of data hazard}
+                \label{fig:datahazard}
+            \end{figure}
+            \hfill \break
+            We can see that in this example we have dependencies between first two instructions \textit{sub,and}. \textit{Sub} instruction changes value of register x2, \textit{and} instruction is trying to read this value, and can get previous value of register x2, and that is not good. 
+            One way to resolve this problem is putting \textit{nop} instructions between \textit{sub,and}. In this case we need to put two \textit{nop}, instruction. This is easiest way to resolve issue, but out throughput is lower. Better solution is implementing unit called \textit{Forwarding unit}. Next image illustrates this perfectly:
+            \begin{figure}[htb!]
+                \centering
+                \includegraphics[width=0.9\linewidth]{forwardingexample.PNG}
+                \caption{Example of forwarding}
+                \label{fig:Forwardingunit}
+            \end{figure}
+            \newpage
+            If there is data hazard, one instruction is depending result of previous, idea is that forwarding unit forward data from previous instruction when that data is necessary. In this example we can see that data needs to be forward two times, one time in \textit{EX} phase, and the other one in \textit{MEM} phase. 
+            \hfill \break
+            Controlpath is expanded with forwarding unit component and her role is to conclude is there dependence between instructions that are in pipe. To do that necessary information is:
+            \begin{enumerate}
+                \item Address of rs1 and rs2 registers from EX phase.  
+                \item Address of rd register from MEM phase. 
+                \item Signal rd-we also from MEM phase. 
+                \item Address rd register from WB phase.
+                \item Signal rd-we also from WB phase. 
+            \end{enumerate}
+            This unit has two output signals. Two for forwarding ALU. Interface description:
+             \begin{table}[htb!]
+                \centering
+                \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             rs1-address-id-i & input & Address of rs1 register from ID phase. \\ \hline  
+             rs2-address-id-i & input & Address of rs2 register from ID phase.  \\ \hline
+             rs1-address-ex-i & input & Address of rs1 register from EX phase. \\ \hline
+             rs2-address-ex-i & input & Address of rs2 register from EX phase. \\ \hline
+             rd-we-mem-i & input & Write enable signal from MEM phase. \\ \hline
+             rd-address-mem-i & input & Address of rs1 register from MEM phase. \\ \hline
+             rd-we-wb-i & input & Write enable signal from WB phase. \\ \hline
+             rd-address-wb-i & input & Address of rs1 register from WB phase. \\ \hline
+             alu-forward-a-o & output & Output signal telling if there is forward to ALU. \\ \hline
+             alu-forward-b-o & output & Output signal telling if there is forward to ALU. \\ \hline
+             %branch-forward-a-o & output & Output signal telling if there is forward to branch condition. \\ \hline
+             %branch-forward-a-o & output & Output signal telling if there is forward to branch condition. \\ \hline
+        \end{tabular}
+        \caption{Forwarding unit interface}
+        \label{tab:Forwarding}
+    \end{table}
+        \hfill \break
+        This output signals are two bit wide. Depending on value on this signal we know if there is need for forward or not. If there is need, we have difference from what phase it is forward. Value "00" tells there is no dependencies between instructions no need for forwarding. Value "01", there is dependence, it is necessary to forward result from WB phase. Value "10", there is dependence, it is necessary to forward result from MEM phase. 
+        \subsubsection*{Hazard with conditional jump}
+        In previous implementation problem of conditional jump isn't resolved. Next example shows situation in witch processor will not execute instruction of conditional jump in correct way, because of effect of data hazard. 
+        \begin{figure}[htb!]
+            \centering
+            \includegraphics[width=0.3\linewidth]{branchhazard.PNG}
+            \caption{Hazard because of conditional jump}
+            \label{fig:conditional jump}
+        \end{figure}
+        We assume that registers x10,x11,x12 and x13 are all set to zero before execution of this instructions.Expectation is to have value 10 written to all registers and when instruction \textit{beq} appears program jumps on L1 label. Unfortunately this is not the case, because value of register x11 is in MEM phase when \textit{beq} instruction is in ID phase, so it is again necessary to forward value back. This is resolved with implementing additional logic in forwarding unit. Two additional output signals are put in interface, Interface now looks:
+        \begin{table}[htb!]
+            \centering
+            \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             rs1-address-id-i & input & Address of rs1 register from ID phase. \\ \hline  
+             rs2-address-id-i & input & Address of rs2 register from ID phase.  \\ \hline
+             rs1-address-ex-i & input & Address of rs1 register from EX phase. \\ \hline
+             rs2-address-ex-i & input & Address of rs2 register from EX phase. \\ \hline
+             rd-we-mem-i & input & Write enable signal from MEM phase. \\ \hline
+             rd-address-mem-i & input & Address of rs1 register from MEM phase. \\ \hline
+             rd-we-wb-i & input & Write enable signal from WB phase. \\ \hline
+             rd-address-wb-i & input & Address of rs1 register from WB phase. \\ \hline
+             alu-forward-a-o & output & Output signal telling if there is forward to ALU. \\ \hline
+             alu-forward-b-o & output & Output signal telling if there is forward to ALU. \\ \hline
+             branch-forward-a-o & output & Output signal telling if there is forward to branch condition. \\ \hline
+             branch-forward-a-o & output & Output signal telling if there is forward to branch condition. \\ \hline
+        \end{tabular}
+        \caption{Forwarding unit interface, added output signals for branch}
+        \label{tab:ForwardingB}
+    \end{table}
+    \hfill \break
+    \hfill \break
+    One important thing is to set flush signal on register ID-reg. This is necessary because instruction after branch is in IF phase so we need to flush it because it doesn't need to be executed. This inserts \textit{nop} instruction in pipe, so throughput is smaller. 
+    \subsubsection*{Stall of processor}
+    For some situations it's not enough just to forward data, so it's necessary to stall processor. Next example shows dependence where this is necessary. 
+    \begin{figure}[htb!]
+        \centering
+        \includegraphics[width=1\linewidth]{stall.PNG}
+        \caption{Sequence where stall is necessary}
+        \label{fig:stall}
+    \end{figure}
+
+    Istruction \textit{LW} executes reading data from data memory after that needs to place it in register bank. Next instruction has dependence with \textit{LW}, it needs accurate value. Problem here is \textit{LW} instruction will not update value until it's completely finish. Because of this in controlpath is added new implementation, \textit{hazard unit}. Job of this unit is: if there is this type of dependence between instructions, stall fetch of new instructions until this is finished. This is done by three control signals: \textit{pc-en, if-id-en, controll-pass}. First controls PC register, second IF-ID-register, by not letting them change they current value. Control-pass resets ID-EX-reg in controlpath, this is equivalent to inserting \textit{nop} instruction, but remembering next instruction in ID phase, because it's not good to lose some instruction in program. 
+    \hfill \break
+    
+    Hazard unit will work correctly if it has next information:
+    \begin{enumerate}
+        \item Address of rs1 and rs2 registers from ID phase.
+        \item Address of rd register from EX phase.
+        \item Is instruction from EX phase executes write to register bank.
+        \item Is instruction from EX phase load instruction.
+        \item Is instruction in ID phase using register from register bank on address rs1 and rs2.
+    \end{enumerate}
+
+    Hazard unit interface is:
+    \begin{table}[htb!]
+            \centering
+            \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             rs1-address-id-i & input & Address of rs1 register from ID phase. \\ \hline  
+             rs2-address-id-i & input & Address of rs2 register from ID phase.  \\ \hline
+             rs1-in-use-i & input & Instruction is using rs1 operand. \\ \hline
+             rs2-in-use-i & input & Instruction is using rs2 operand. \\ \hline
+             branch-id-i  & input & Indication if instruction is conditional jump. \\ \hline
+             rd-we-ex-i & input & Write enable signal from EX phase. \\ \hline
+             rd-address-ex-i & input & Address of rd register from EX phase. \\ \hline
+             rd-address-mem-i & input & Address of rd register from MEM phase. \\ \hline
+             mem-to-reg-ex-i & input & Indication if instruction load or uncoditional jump. \\ \hline
+             mem-to-reg-mem-i & input & Indication if instruction is load or uncoditional jump. \\ \hline
+             stall-i & input & Indication if instruction is executing more than one cycle. \\ \hline
+             pc-en-o & output & Enable of PC register. \\ \hline
+             if-id-en-o & output & Enable of IF-ID register. \\ \hline
+             control-pass-o & output & Inserting nop instruction and keeping previous instruction in ID phase. \\ \hline
+        \end{tabular}
+        \caption{Hazard unit interface}
+        \label{tab:Hazard}
+    \end{table}
+    \addcontentsline{toc}{subsection}{Additional logic}
+    \subsection*{Additional logic}
+    There is additional logic in datapath, in sight of mulitplexers.This mulitiplexers selection signals are all connected to control signals from controlpath. This logic is:
+    \begin{enumerate}
+        \item Logic for addition of PC, needed to be implemented because of conditional and unconditional jumps. \textit{rd-mux}
+        \item Logic implemented because of instruction AUIPC. \textit{load-mux}
+        \item Load and Store logic implemented because we have diffrent type of this instructions.
+        \item Additional signal towards controlpath, telling to stall next instructions because current instructions are more that one cycle executing. \textit{stall}
+        \item Logic for branch condition, because we have six different branch conditions, which one is necessary to watch is looked trough additional signal. 
+    \end{enumerate}
+
+    There is also logic inside ALU unit, for M-set of instructions. This logic is representing different algorithms for multiplication and division. Number of cycle needed to execute multiplication is three, and for division is thirty two. This was not necessary but better frequency and area used where in consideration so this was the path taken.
+    \newpage
+    \subsubsection*{RV32IM Top description}
+    System interface on top is represented on next image. For better understanding memory was drawn in system flow, they are not part of datapath and controlpath. Top representation:
+    \begin{figure}[htb!]
+        \centering
+        \includegraphics[width=1\linewidth]{Top.png}
+        \caption{Top interface}
+        \label{fig:top}
+    \end{figure}
+    \hfill \break
+    On this image we can see how hole system looks like. Next image is going to represent interface inside RV32IM block. To get better understanding how datapath and controlpath are connected. 
+    \begin{figure}[htb!]
+        \centering
+        \includegraphics[width=0.6\linewidth]{RV32IM.png}
+        \caption{RV32IM interface}
+        \label{fig:RV32IM}
+    \end{figure}
+
+\newpage
+\addcontentsline{toc}{section}{Branch prediction}
+\section*{Branch prediction}
+A pipelined machine achieves its maximum throughput when it is in the streaming mode. For the fetch stage, streaming mode implies the continuous fetching of instructions from sequential locations in the program memory. Whenever the control flow of the program deviates from the sequential path, potential disruption to the streaming mode can occur. For unconditional branches, subsequent instructions cannot be fetched until the target address of the branch is determined. For conditional branches, the machine must wait for the resolution of the branch condition, and if the branch is to be taken, it must further wait until the target address is available. For the PC-relative addressing mode, the branch target address can be generated during the fetch stage, resulting in a penalty of one cycle. If the register indirect addressing mode is used, the branch instruction must traverse the decode stage to access the register. In this case a two-cycle penalty is incurred. For register indirect with an offset addressing mode, the offset must be added after register access and a total three-cycle penalty can result. For unconditional branches, only the penalty due to target address generation is of concern. For conditional branches, branch condition resolution latency must also be considered. 
+\newline
+\newline
+To increase the number of instructions that execute in
+parallel, modern processors make a branch prediction and speculatively execute the instructions in the predicted path of program control flow. If the branch is discovered later on to have been mispredicted, actions are taken to recover the state of the processor to the point before the mispredicted branch, and execution is resumed along the correct path.
+\newline 
+\newline
+Predicting branch instruction can be separated in two parts: predicting the branch direction and predicting the branch target. For branch direction there are many algorithms implemented throughout history. In next section we will dive more into explanation of them. After that section containing explanation about branch target and branch target buffer. 
+
+\addcontentsline{toc}{subsection}{Branch predictors}
+\newpage
+\subsection*{Branch predictors}
+
+Branch predictors can be divided in three categories depending on how they make decisions. These three categories are:
+\begin{enumerate}
+    \item \textit{Static branch predictors} - predictors that do not make use of any run-time information about branch behavior. The advantage of static branch prediction techniques is that they are very simple to implement, and they require very little hardware resources. Some example of static branch predictors are: single-direction prediction, backwards taken/forward not taken (BTFNT), profile-based prediction. 
+    \item \textit{Dynamic branch predictors} - predictors that can monitor branch behavior while the program is running and make future predictions based on these observations. Some example of dynamic branch predictors are: Smith's algorithm, two level prediction tables, index-sharing predictor, perception predictor, Bi-mode predictor etc. These are just some of the algorithms that represent this group. 
+    \item \textit{Hybrid branch predictors} - predictors that combine the strengths of multiple simpler predictors to form a better overall predictor. Examples of hybrid predictors are: Tournament predictor, Multi-hybrid predictor.
+\end{enumerate}
+
+Branch predictor tells us if branch is taken or not, but this is only one half of a problem. After the direction of a branch is known, the actual target address of the next instruction along the predicted path must also be determined. If the branch is predicted to be not-taken, then the target address is simply the current branch’s address plus the size of an instruction word. If the branch is predicted to be taken, then the target will depend on the type of branch. Target prediction must also cover unconditional branches (branches that are always taken).There are two common types of branch targets. Branch targets may be PC relative, which means that the taken target is always at the current branch’s address plus a constant (the constant may be negative). A branch target can also be indirect, which means that the target is computed at run time. An indirect branch target is read from a register, sometimes with a constant offset added to the contents of the register. The target of a branch is usually predicted by a branch target buffer (BTB).The BTB is a cache-like structure that stores the last seen target address for a branch instruction. When making a branch prediction, the traditional branch predictor provides a predicted direction. In parallel, the processor uses the current branch’s PC to index into the BTB. If the branch predictor predicts not-taken, the target is simply the next sequential instruction. If the branch predictor predicts taken and there is a hit in the BTB, then the BTB’s prediction is used as the next instruction’s address. It is also possible that there is a taken-branch prediction, but there is a miss in the BTB. In this situation, the processor may stall fetching until the target is known. If the branch has a PC-relative target, then the fetch only stalls for a few cycles to wait for the completion of the instruction fetch from the instruction cache, the target offset extraction from the instruction word, and the addition of the offset to the current PC to generate the actual target. Another approach is to fall back to the not-taken target on a BTB miss.
+
+In this project we determine to implement hybrid branch predictor with BTB, to cover full implementation of advanced branch prediction system. 
+
+\addcontentsline{toc}{subsection}{Implementation of Branch predictor}
+\subsection*{Implementation of Branch predictor}
+
+There we represented different types of branch predictors in previous section. In this project we decided to implement multihybrid branch predictor. This predictor is from hybrid class of predictors. 
+\newline
+The multihybrid branch predictor does allow the dynamic selection between an arbitrary number of component predictors. The lower bits of the branch address are used to index into a table of prediction selection counters. Each entry in the table consists of n 2-bit saturating counters, c1, c2, . . . cn, where Ci is the counter corresponding to component predictor Pi. The components that have been predicting well have higher counter values. The meta-prediction is made by selecting the component whose counter value is 3 (the maximum) and a predetermined priority ordering is used to break ties. All counters are initialized to 3, and the update rules guarantee that at least one counter will have the value of 3. To update the counters, if at least one component with a counter value of 3 was correct, then the counter values corresponding to components that mispredicted are decremented (saturating at zero). Otherwise, the counters corresponding to components that predicted correctly are incremented (saturating at 3).
+\newline
+Figure illustrates the hardware organization for the multihybrid metapredictor with n component predictors. The branch address is used to look up an entry in the table of prediction selection counters, and each of the n counters is checked for a value of 3. A priority encoder generates the index for the component with a counter value of 3 and the highest priority in the case of a tie. The index signal is then forwarded to the final multiplexer that selects the final prediction.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{Multihybrid_prediction.png}
+    \caption{Multihybrid branch prediction}
+    \label{fig:Multihybrid branch prediction}
+\end{figure}
+\newline
+In this project we decide to make four dynamic branch predictors. Two of them are two-level predictors GAg and PAg. Two main component used in two-level branch predictor are \textit{branch history table} (BHT) and pattern history table (PHT). Upper case letter are used to describe type of BHT used in two-level branch predictor, and lower case letter are used to describe type of PHT used in predictor. The second two predictors are index type predictors, that represent same type as two-level predictors, except they use XOR function on BHT value and branch address value, they don't concatenate as two-level predictors. This predictors are called gshare and pshare predictors. Gshare predictor contains global BHT, and pshare contains local BHT. Next figure expands inside of Pi blocks and represent top model structure of branch predictor. 
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1\linewidth]{Multihybrid_advanced.png}
+    \caption{Multihybrid branch prediction with predictors}
+    \label{fig:M2}
+\end{figure}
+
+\addcontentsline{toc}{subsubsection}{Implementation table of counters}
+\subsubsection*{Implementation table of counters}
+Implementation starts with implementing table of counter. This is different approach from other hybrid implementation where is used meta-predictor, where prediction is chosen statically. The multihybrid branch predictor does allow the dynamic selection between an arbitrary number of component predictors. Branch address uses lower bits to address row in table that contains n 2-bit saturating counters where each counter represents one predictor. In this case we have four 2-bit counters in each row. 
+To address row in table it is necessary to index lower bits of PC (branch address). In this project it is decided to use 4 lowest bits from PC. This was decided analyzing area that is necessary to implement this table, and also area of four different dynamic branch predictors. 
+This table has 16 rows of four 2-bit counters. All counters are initialized to three, after each iteration counter that is predicted correct is incremented (saturating at 3), and counters which component mispredicted are decremented (saturating at 0). 
+Next figure represents structure of this table. 
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.7\linewidth]{tableofcounters.png}
+    \caption{Design structure - table of 2-bit counters}
+    \label{fig:c1}
+\end{figure}
+\newline
+\newline
+\newline
+\newline
+Interface for table of counters is described in next table.
+    \begin{table}[htb!]
+            \centering
+            \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             branch-address-4bit & input & Using lowest 4 bit from PC to address in table. \\ \hline  
+             cnt-one & output & Value of first counter in row.  \\ \hline
+             cnt-two & output & Value of second counter in row. \\ \hline
+             cnt-three & output & Value of third counter in row. \\ \hline
+             cnt-four & output & Value of fourth counter in row. \\ \hline
+             branch-addr-prev-loc & input & Signal for updating, previous address value of counters. \\ \hline
+             taken-pred & input & Signal indicating if branch predictor was correct or not. \\ \hline
+        \end{tabular}
+        \caption{Table of 2-bit counters interface}
+        \label{tab:Ct}
+    \end{table}
+
+\addcontentsline{toc}{subsubsection}{Implementation Priority encoder}
+\subsubsection*{Implementation Priority encoder}
+Priority encoder generates the index for the component with the value of 3 and the highest priority in the case of a tie. To examine more about the tie case, the counter with lower index is the one that is going to be taken. There are other approaches to be taken in consideration for tie situation, but this is the most effective in area consumption. Next figure represents structure of priority encoder. 
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.3\linewidth]{Priorityecnoder.png}
+    \caption{Design Structure - Priority encoder}
+    \label{fig:Pe}
+\end{figure}
+\newline
+\newline
+\newline
+\newline
+\newline
+\newline
+Interface description of priority encoder: 
+\begin{table}[htb!]
+            \centering
+            \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             index-sel & output & Index with value 0-3 deciding which component to take. \\ \hline  
+             cnt-one & input & Value of first counter in row.  \\ \hline
+             cnt-two & input & Value of second counter in row. \\ \hline
+             cnt-three & input & Value of third counter in row. \\ \hline
+             cnt-four & input & Value of fourth counter in row. \\ \hline
+        \end{tabular}
+        \caption{Priority encoder interface}
+        \label{tab:PeI}
+    \end{table}
+\addcontentsline{toc}{subsubsection}{Implementation gshare branch predictor}
+\subsubsection*{Implementation gshare branch predictor}
+Gshare represent variation of a global-history two-level. The gshare algorithm attempts to make better use of the index bits by hashing the BHR and the PC together to select an entry from the PHT. The hashing function used is a bit-wise exclusive-OR operation. The combination of the BHR and PC tends to contain more information due to the nonuniform distribution of PC values and branch histories.
+The BHR is a shift register where the outcome of each branch is shifted into one end, and the oldest outcome is shifted out of the other end and discarded. The branch outcomes are represented by zeros and ones, which correspond to not-taken and taken, respectively. Therefore, an h-bit branch history register records the h most recent branch outcomes.
+PHT represents array of 2-bit counter where MSB is used to tell final decision, after that it's incremented if decision is correct, or decrement if there was a misprediction.
+In this project we use 4 lowest bits from branch address, so that indicates that BRH is 4-bit shift register, and address space for PHT is sixteen locations. 
+\newline
+Next figure represents gshare structure. 
+\begin{figure}[htb!]
+    \centering
+    \includegraphics[width=0.5\linewidth]{Gshare.png}
+    \caption{Design structure - Gshare branch predictor}
+    \label{fig:Gshare}
+\end{figure}
+\newline
+\newline
+\newline
+\newline
+Interface of gshare branch predictor is:
+\begin{table}[htb!]
+            \centering
+            \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             branch-address-4bit & input & Using lowest 4 bit from PC to address in table. \\ \hline  
+             branch-addr-prev-loc & input & Signal form EX phase updating PHT modul.  \\ \hline
+             pht-addr-4bit & output & Signal on what address we need to update value of instruction.  \\ \hline
+             branch-inst & input & Signal indicating if instruction is branch or not.  \\ \hline
+             bhr-i & input & Signal indicating if branch was taken or not.  \\ \hline
+             gshare-pred & output & Output of gshare predictor indicating taken/not taken.  \\ \hline
+             
+             
+        \end{tabular}
+        \caption{Gshare branch predictor interface}
+        \label{tab:GshareI}
+    \end{table}
+\addcontentsline{toc}{subsubsection}{Implementation GAg branch predictor}
+\subsubsection*{Implementation GAg branch predictor}
+GAg represents one of nine variations of two-level branch predictor. Two main component in two-level branch predictor are BHR and PHT. BHR has three different variations and uses three different letters for annotation (G,P,S). PHT has also three different variations and uses three different letters for annotation (g,p,s). We can see that GAg represents GBHR and gPHT, that means that we have global BHR and PHT. 
+In this branch predictor there isn't operation between BHR and PC to get address of PHT, they are concatenating. In that case it is decided to have 3-bit wide BHR. BHR with 4-bit from PC give seven bit wide address signal of PHT, so there are 128 different locations in PHT. 
+Next figure represents structure of GAg. Concatenation is represented with circle with letter C. 
+\begin{figure}[htb!]
+    \centering
+    \includegraphics[width=0.5\linewidth]{GAg.png}
+    \caption{Design structure - GAg branch predictor}
+    \label{fig:GAg}
+\end{figure}
+\newline
+\newline
+\newline
+\newline
+\newline
+\newline
+Interface of GAg branch predictor is:
+\begin{table}[htb!]
+            \centering
+            \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             branch-address-4bit & input & Using lowest 4 bit from PC to address in table. \\ \hline 
+             branch-addr-prev-loc & input & Signal form EX phase updating PHT modul.  \\ \hline
+             pht-addr-4bit & output & Signal on what address we need to update value of instruction.  \\ \hline
+             branch-inst & input & Signal indicating if instruction is branch or not.  \\ \hline
+             bhr-i & input & Signal indicating if branch was taken or not.  \\ \hline
+             GAg-pred & output & Output of GAg predictor indicating taken/not taken.  \\ \hline
+        \end{tabular}
+        \caption{GAg branch predictor interface}
+        \label{tab:GAgI}
+    \end{table}
+
+\addcontentsline{toc}{subsubsection}{Implementation pshare branch predictor}
+\subsubsection*{Implementation pshare branch predictor}
+Pshare represents a variation of gshare predictor and uses per-address branch history table to store local branch history. The pshare algorithm is the local-history analog of the gshare algorithm. The low-order bits of the branch address are used to index into the first-level BHT in the same fashion as the PAg/PAs/PAp two-level predictors. Then the contents of the indexed BHR are XORed with the branch address to form the PHT index.
+In this project branch history table is addressed with four lowest bits of PC, that indicates it has sixteen locations and each location has register wide 4 bits. PHT also has sixteen locations and each location has 2-bit counter. Next figure shows structure look of pshare predictor. 
+\begin{figure}[htb!]
+    \centering
+    \includegraphics[width=0.5\linewidth]{pshare.png}
+    \caption{Design structure - pshare branch predictor}
+    \label{fig:pshare}
+\end{figure}
+\newline
+\newline
+\newline
+\newline
+\newline
+\newline
+\newline
+Interface of pshare branch predictor is:
+        \begin{table}[htb!]
+            \centering
+            \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             branch-address-4bit & input & Using lowest 4 bit from PC to address in table. \\ \hline
+             branch-addr-prev-loc & input & Signal form EX phase updating PHT modul.  \\ \hline
+             branch-addr-prev-loc-local & input & Signal form EX phase updating BHR modul.  \\ \hline
+             pht-addr-4bit & output & Signal on what address we need to update value of instruction.  \\ 
+             \hline
+             branch-inst & input & Signal indicating if instruction is branch or not.  \\ \hline
+             bhr-i & input & Signal indicating if branch was taken or not.  \\ \hline
+             pshare-pred & output & Output of pshare predictor indicating taken/not taken.  \\ \hline
+        \end{tabular}
+        \caption{Pshare branch predictor interface}
+        \label{tab:pshareI}
+    \end{table}
+
+\addcontentsline{toc}{subsubsection}{Implementation PAp branch predictor}
+\subsubsection*{Implementation PAp branch predictor}
+PAp represents one of nine variations of two-level branch predictor. In this variation we have per-address branch history table, and per-address pattern history table. In this project each location in BHT is having 3-bit shift register, and because of 4-bit PC address we have sixteen PHT, with address span from 0-127. So design structure of PAp is represented on next figure. 
+\begin{figure}[htb!]
+    \centering
+    \includegraphics[width=0.5\linewidth]{PAp.png}
+    \caption{Design structure - PAp branch predictor}
+    \label{fig:PAp}
+\end{figure}
+\newline
+Interface of a PAp branch predictor is: 
+\begin{table}[htb!]
+            \centering
+            \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             branch-address-4bit & input & Using lowest 4 bit from PC to address in table. \\ \hline
+             branch-addr-prev-loc & input & Signal form EX phase updating PHT modul.  \\ \hline
+             branch-addr-prev-loc-local & input & Signal form EX phase updating BHR modul.  \\ \hline
+             pht-addr-4bit & output & Signal on what address we need to update value of instruction.  \\ 
+             \hline
+             branch-inst & input & Signal indicating if instruction is branch or not.  \\ \hline
+             bhr-i & input & Signal indicating if branch was taken or not.  \\ \hline
+             PAp-pred & output & Output of pshare predictor indicating taken/not taken.  \\ \hline
+        \end{tabular}
+        \caption{PAp branch predictor interface}
+        \label{tab:PApI}
+    \end{table}
+\newline
+The final component in system is multiplexer 4 on 1 that connects priority encoder and four branch predictors. Selection signal is index-sel output of priority encoder, and four inputs in multiplexer are prediction of each component. 
+\newpage
+\addcontentsline{toc}{section}{Control and Status Register Instructions} 
+\section*{Control and Status Register Instructions}
+RISC-V defines a separate address space of 4096 Control and Status registers associated with each hart. This chapter defines the full set of CSR instructions that operate on these CSRs.While CSRs are primarily used by the privileged architecture, there are several uses in unprivileged code including for counters and timers, and for floating-point status.
+\hfill \break
+All CSR instructions atomically read-modify-write a single CSR, whose CSR specifier is encoded
+in the 12-bit csr field of the instruction held in bits 31–20. The immediate forms use a 5-bit
+zero-extended immediate encoded in the rs1 field.
+Instructions are: 
+\begin{enumerate}
+    \item CSRRW (Atomic Read/Write CSR) - instruction atomically swaps values in the CSRs and integer registers. CSRRW reads the old value of the CSR, zero-extends the value to XLEN bits, then writes it to integer register rd. The initial value in rs1 is written to the CSR. If rd=x0, then the instruction shall not read the CSR and shall not cause any of the side effects that might occur on a CSR read.
+    \item CSRRS (Atomic Read and Set Bits in CSR) instruction reads the value of the CSR, zero extends the value to XLEN bits, and writes it to integer register rd. The initial value in integer register rs1 is treated as a bit mask that specifies bit positions to be set in the CSR. Any bit that is high in rs1 will cause the corresponding bit to be set in the CSR, if that CSR bit is writable. Other bits in the CSR are unaffected (though CSRs might have side effects when written).
+    \item  CSRRC (Atomic Read and Clear Bits in CSR) instruction reads the value of the CSR, zero extends the value to XLEN bits, and writes it to integer register rd. The initial value in integer register rs1 is treated as a bit mask that specifies bit positions to be cleared in the CSR. Any bit that is high in rs1 will cause the corresponding bit to be cleared in the CSR, if that CSR bit is writable. Other bits in the CSR are unaffected.
+    \item The CSRRWI, CSRRSI, and CSRRCI variants are similar to CSRRW, CSRRS, and CSRRC respectively, except they update the CSR using an XLEN-bit value obtained by zero-extending a 5-bit unsigned immediate (uimm[4:0]) field encoded in the rs1 field instead of a value from an integer register. For CSRRSI and CSRRCI, if the uimm[4:0] field is zero, then these instructions will not write to the CSR, and shall not cause any of the side effects that might otherwise occur on a CSR write. For CSRRWI, if rd=x0, then the instruction shall not read the CSR and shall not cause any of the side effects that might occur on a CSR read. Both CSRRSI and CSRRCI will always read the CSR and cause any read side effects regardless of rd and rs1 fields.
+\end{enumerate}
+
+For both CSRRS and CSRRC, if rs1=x0, then the instruction will not write to the CSR at all, and so shall not cause any of the side effects that might otherwise occur on a CSR write, such as raising illegal instruction exceptions on accesses to read-only CSRs. Both CSRRS and CSRRC always read the addressed CSR and cause any read side effects regardless of rs1 and rd fields. Note that if rs1 specifies a register holding a zero value other than x0, the instruction will still attempt to write the unmodified value back to the CSR and will cause any attendant side effects. A CSRRW with rs1=x0 will attempt to write zero to the destination CSR.
+\hfill \break
+\hfill \break
+This instructions are encoded in next format:
+\hfill \break
+    \begin{table}[htb!]
+        \centering
+        \begin{tabular}{|c|c|c|c|c|c|} \hline 
+             Instr. & csr & rs1 & funct3 & rd & opcode\\ \hline 
+             CSRRW & csr & rs1 & 0b001 & rd & 0b1110011\\ \hline 
+             CSRRS & csr  & rs1 & 0b010 & rd & 0b1110011\\ \hline 
+             CSRRC & csr  & rs1 & 0b011 & rd & 0b1110011\\ \hline 
+             CSRRWI & csr & zimm & 0b101 & rd & 0b1110011\\ \hline 
+             CSRRSI & csr & zimm & 0b110 & rd & 0b1110011\\ \hline 
+             CSRRCI & csr & zimm & 0b111 & rd & 0b1110011\\ \hline 
+        \end{tabular}
+        \caption{CSR instructions}
+        \label{tab:CSRtable}
+    \end{table}
+
+\newpage
+\addcontentsline{toc}{section}{Implementation of Control Status Registers} 
+\section*{Implementation of Control Status Registers}
+In previous section was described what instructions there are with CSRs and what logic it represents. After analyzing what needs to be implemented, first conclusion was to implement new register bank with 4096 locations. Second step was to understand what control signals are necessary for this instructions to work properly and finally last step was connecting this control signals in data path. 
+First step is implementing register bank with one read and one write port. In next table is described interface of register bank. 
+\begin{table}[htb!]
+            \centering
+            \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             clk & input & Clock signal in system. \\ \hline
+             reset & input & Reset signal active on low.  \\ \hline
+             rs1-address-i & input & Address of read register.  \\ \hline
+             rs1-data-o & output & Value of read register.  \\ \hline
+             rd-we-i & input & Write enable signal.  \\ \hline
+             rd-address-i & input & Address of write register.  \\ \hline
+             rd-data-i & input & Value of write register.  \\ \hline
+        \end{tabular}
+        \caption{CSR interface}
+        \label{tab:csrI}
+    \end{table}
+Second step is implementing additional control signals to decode this instructions and control flow of data in data path. It is implemented new module called csr decoder. This module produces two signal imm-clr and csr-op. Imm-clr signal is set to 1 when instruction that is executing is CSR instruciton, this signal is one bit wide. Csr-op signal is three bit wide because there are six CSR instructions, and each value is representing one instruction. Values are depending od funct3 filed in instruction, this field is diffrent for each instruction, so it is decoded depending on him. 
+\newline
+There is also one additional signal added to control decoded unit csr-int-mux. This signal indicates if we take value of first operand from integer register bank or csr register bank. 
+\newline
+Interface for csr decoder is described in next table. 
+\begin{table}[htb!]
+            \centering
+            \begin{tabular}{|c|c|c|} \hline 
+             Interface & I/O & Description \\ \hline  
+             opcode-i & input & First seven bits of instruction.  \\ \hline
+             funct3-i& input & Three bits for instruction, decoding what instruction is executing.  \\ \hline
+             csr-op-o & output & Three bit signal indicating instruction.  \\ \hline
+             imm-clr-o & output & Clear bit set to one when csr instruction are executing.  \\ \hline
+        \end{tabular}
+        \caption{CSR decoder interface}
+        \label{tab:csrDI}
+\end{table}
+\newline
+This three additional signal are connected to data path. All are representing selection signals of multiplexers in data path. 
+
+\newpage
+\addcontentsline{toc}{section}{Float point} 
+\section*{Float point}
+In this section is described arithmetic float operations. All of this operations are single precision and are implemented on IEEE standard. Operations are: addition/subtraction, multiplication/division, square root. 
+First step that we need to describe is format of float point number.
+\addcontentsline{toc}{subsection}{Floating point number} 
+\subsection*{Floating point number}
+The floating point numbers representation is based on the scientific notation: the decimal point is not set in a fixed position in the bit sequence, but its position is indicated as a base power. All the floating point numbers are composed by three components:
+\begin{itemize}
+    \item Sign: it indicates the sign of the number (0 positive and 1 negative)
+    \item Mantissa: it sets the value of the number
+    \item Exponent: it contains the value of the base power (biased)
+    \item Base: the base (or radix) is implied and it is common to all the numbers (2 for binary numbers) 
+\end{itemize}
+\addcontentsline{toc}{subsection}{The Standard IEEE 754} 
+\subsection*{The Standard IEEE 754}
+Standard IEEE 754 specifies formats and methods in order to operate with floating point arithmetic. These methods for computational with floating point numbers will yield the same result regardless the processing is done in hardware, software or a combination for the two or the implementation.
+The standard specifies:
+\begin{itemize}
+    \item Formats for binary and decimal floating point data for computation and data interchange 
+    \item Different operations as addition, subtraction, multiplication and other operations
+    \item Conversion between integer-floating point formats and the other way around
+    \item Different properties to be satisfied when rounding numbers during arithmetic and conversions 
+    \item Floating point exceptions and their handling (NaN, ±infinity or zero)
+\end{itemize}
+
+The standard IEEE 754 requires that the operation result must be the same which would obtain if a calculation with absolute precision and rounded had been done. Four types of rounding are described by the standard:
+\begin{itemize}
+    \item Rounding to the nearest (to even number in case of tie) is the floating point number that is the closest to x. 
+    \item Rounding to +infinity is the smallest floating point number (possibly +infinity) greater than or equal to x
+    \item Rounding to -infinity is the smallest floating point number (possibly -infinity) less than or equal to x
+    \item Rounding to zero is the closest floating point number to x that is no greater in magnitude than x (it is equal to rounding to -infinity if x greater than 0 and to +infinity if x less than 0)
+\end{itemize}
+\addcontentsline{toc}{subsection}{Floating Point Adder Design} 
+\subsection*{Floating Point Adder Design}
+Steps in calculating addition/subtraction are: 
+\begin{enumerate}
+    \item Extracting signs, exponents and mantissas of both A and B numbers.
+    \item Treating the special cases:
+      \begin{itemize}
+          \item Operations with A or B equal to zero 
+          \item Operations with ±infinity
+          \item Operations with NaN 
+      \end{itemize}  
+    \item Finding out what type of numbers are given:
+        \begin{itemize}
+              \item Normal
+              \item Subnormal
+              \item Mixed 
+          \end{itemize} 
+    \item  Shifting the lower exponent number mantissa to the right (e1 - e2) bits. Setting the output exponent as the highest exponent.   \item  Working with the operation symbol and both signs to calculate the output sign and determine the operation to do.
+    \item Addition/Subtraction of the numbers and detection of mantissa overflow (carry bit).
+    \item Standardizing mantissa shifting it to the left up the first one will be at the first position and updating the value of the exponent according with the carry bit and the shifting over the mantissa. 
+    \item Detecting exponent overflow or underflow (result NaN or ±infinity).
+\end{enumerate}
+This steps are designed in three parts:
+\begin{enumerate}
+    \item Pre-Adder Block
+    \item Adder Block
+    \item Standardizing block 
+\end{enumerate}
+The first sub-block is the Pre-Adder. The goals are:
+\begin{enumerate}
+    \item Distinguishing between normal, subnormal or mixed (normal-subnormal combination) numbers.
+    \item Treating the numbers in order to be added (or subtracted) in the adder block.
+        \begin{itemize}
+            \item Setting the Output’s exponent
+            \item Shifting the mantissa
+            \item Standardizing the subnormal number in mixed numbers case to be treated as a normal case
+        \end{itemize}
+\end{enumerate}
+The second block is Adder the easiest part of the blocks. This block only implements the operation (addition or subtraction). Two functions are implemented in this part of the code:
+\begin{enumerate}
+    \item Obtaining the output’s sign
+    \item Implementing the desired operation 
+\end{enumerate}
+In this block two related problems should be taken into account. Firstly, the calculation symbol (+ or -) depends on itself and the A and B’s signs. Secondly, positive or negative numbers addition gives the same result. The problem will appear when the signs are different. In these cases the positive number will be kept in the first operand and the negative one in the second operand. All these problems will be explained in detail in next sections.
+\break \hfill
+Finally the Standardizing Block takes the result of the addition/subtraction and gives it an IEEE 754 format.The procedure is as follows:
+\begin{enumerate}
+    \item Shifting the mantissa to standardize the result
+    \item Calculating the new exponent according with the addition/subtraction overflow (carry out bit) and the displacement of the mantissa. 
+\end{enumerate}
+The exponent value must be controlled when these steps are going to be made because it could be the number of positions the mantissa must be shifted are higher than the exponent value. In this case the result becomes subnormal. Another exception is when exponent and number of displacements are equal: mantissa will be shifted and exponent will be one.
+\newpage
+\addcontentsline{toc}{subsubsection}{Implementation of Pre-Adder} 
+\subsubsection*{Implementation of Pre-Adder}
+Pre-Adder block contains several smaller blocks,each of them is going to be described what is functional specification. 
+Sub-blocks:
+\begin{enumerate}
+    \item n-case block - Both number A and number B are introduced as inputs. Vector S is one of the outputs and it contains the result when there is a special case, otherwise undefined. Finally, enable signal enables or disables the adder block if it is needed or not.
+    \item n-subn block - Number A and B are the entries. The outputs are six. SA-MA and SB-MB contain the sign and mantissa of A and B respectively. Comp signal is referred to the result comparison and EO is the result exponent. 
+    \item comp block - The block entries are both numbers and the outputs are the same numbers ordered as normal NA and subnormal NB.
+    \item zero block - Counting zeros is the zero block target. The mantissa which is needed to shift is introduced as an entry in T vector and the output Zcount contains the number of zeros the mantissa has on the beginning which corresponds with the number of positions the vector must be shifted.
+    \item shift block - Shifting is required to match the normal and mixed mantissas to perform the addition/subtraction properly.
+    \item norm block - Finally, the rest of the entities are all included in the norm block. It also performs the output exponent treatment. The inputs are the numbers A and B. Once the subnormal one has been shifted it is fixed in MB. The normal number is set in MA.
+    \item comp-exp block - The comp-exp entries are the two introduced numbers again. There are several outputs: SA and SB are the sign of A and B respectively, EMax is the output exponent, MMax the largest mantissa, Mshft the mantissa to shift, Dexp the number of positions Mshft must be shifted and Comp indicates what number is the largest one.
+    \item selector block - Selector block prepares the numbers: the entries are shorter than outputs because the implicit bit (high if the number is normal and low in subnormal’s case) and the guard bits are added in this block. Enable signal enables this block (and therefore the entire preadder block) when we do not have a special case. 
+    \item MUX/DEMUX blocks - The operation of the demux demultiplexor is routing the A and B numbers to the subnormal, normal or mixed block according with the e-data value. NumberA, NumberB and the enable signal e-data are the entries and the outputs are 3 pairs of signals but only one pair is activated in each time. The typical demultiplexor’s behaviour. The mux-ns multiplexor’s target is selecting which signal must be introduced in the normal numbers block: normal numbers or a standardized numbers from the mixed numbers block.Finally mux-adder multiplexor is in charge of selecting which data are going to be introduced in the adder.  
+\end{enumerate}
+Next step is showing structural look of Pre-Adder block design. 
+\begin{figure}[htb!]
+    \centering
+    \includegraphics[width=1\linewidth]{preadder2.png}
+    \caption{Structural Pre-adder}
+    \label{fig:preadder}
+\end{figure}
+\addcontentsline{toc}{subsubsection}{Implementation of Adder} 
+\subsubsection*{Implementation of Adder}
+The adder is a fundamental piece of the design because it implements the addition/subtraction operation, main purpose of the 32 bit Floating Point Adder. 
+The Adder block is composed by two entities: signout and adder. Signout is responsible for the sign operation and the adder is the adder strictly speaking. 
+Next figure shows structural look of Adder block:
+\begin{figure}[htb!]
+    \centering
+    \includegraphics[width=1\linewidth]{adder.png}
+    \caption{Structural Adder}
+    \label{fig:adder}
+\end{figure}
+\addcontentsline{toc}{subsubsection}{Implementation of Standardizing block} 
+\subsubsection*{Implementation of Standardizing block}
+The Standardizing block, as its name suggest, is responsible for displaying the addition/subtraction operation value according to the IEEE 754 standard. 
+This block is composed of four entities. Shift-left and zero blocks have been explained. Round block provides more accuracy to the design. Four bits at the end of the vector had been added in the Pre-Adder block. Now it is time to use these bits in order to round the result.
+Next figure shows structural look of Standardizing block:
+\begin{figure}[htb!]
+    \centering
+    \includegraphics[width=1\linewidth]{Stabilizing.png}
+    \caption{Structural Stabilizing block}
+    \label{fig:Stabilizing}
+\end{figure}
+\addcontentsline{toc}{subsubsection}{Float point model} 
+\subsubsection*{Float point model}
+Representing float point adder/subtractor in block form on next figure. It is done this way because of complexity of design. Thicker arrows represent multiple signals between two blocks. 
+\begin{figure}[htb!]
+    \centering
+    \includegraphics[width=1\linewidth]{FADD.png}
+    \caption{FADD/FSUB structure}
+    \label{fig:FADD}
+\end{figure}
+
+\newpage
+\addcontentsline{toc}{section}{Acronyms} 
+\section*{Acronyms}
+    Defining all acronyms in document. 
+    \begin{table}[ht]
+        \centering
+        \begin{tabular}{|c|c|} \hline 
+            HW & Hard ware\\ \hline 
+            SW & Software\\ \hline 
+            ISA & Instruction set architecture\\ \hline 
+            PC & Program counter\\ \hline 
+            ALU & Arithmetic logic unit\\ \hline 
+            BHR & Branch history register\\ \hline
+            BHT & Branch history table\\ \hline
+            PHT & Pattern history table\\ \hline
+            GAg & Global Adaptive branch prediction using one global PHT\\ \hline
+            PAp & Per-address Adaptive branch prediction using per-address PHT\\ \hline
+            CRS & Control Status Register \\ \hline
+        \end{tabular}
+        \caption{Acronyms}
+        \label{tab:table4}
+    \end{table}
+\end{document}
