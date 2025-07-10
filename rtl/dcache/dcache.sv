@@ -106,10 +106,10 @@ module dcache #(
     // --- Cache Memory Structure ---
     // Defines the structure for a single cache way entry
     typedef struct packed {
-        logic [CACHE_LINE_BITS-1:0] data;
-        logic [TAG_BITS-1:0]        tag;
-        logic                       valid;
-        logic                       dirty;
+        logic [CACHE_LINE_BITS-1:0]  data;
+        logic [TAG_BITS-1:0]         tag;
+        logic                        valid;
+        logic                        dirty;
         logic [LRU_COUNTER_BITS-1:0] lru;
     } cache_way_entry_t;
 
