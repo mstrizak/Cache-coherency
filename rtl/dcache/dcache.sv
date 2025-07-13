@@ -71,7 +71,7 @@ module dcache #(
 );
 
     // --- Cache Parameters (Derived) ---
-    localparam CACHE_SIZE_BYTES     = 2048; // 2KB
+    localparam CACHE_SIZE_BYTES     = 1024; // 1KB
     localparam CACHE_LINE_BYTES     = CACHE_LINE_BITS / 8; // 16 bytes
     localparam NUM_WAYS             = 4;
     localparam NUM_LINES            = CACHE_SIZE_BYTES / CACHE_LINE_BYTES; // 128 lines
@@ -153,9 +153,9 @@ module dcache #(
     logic                   next_has_invalid_way;
     logic [NUM_WAYS-1:0]    next_lru_way;
     logic                   next_is_lru_dirty;
-    logic [LRU_COUNTER_BITS-1:0] max_lru_val;
-    logic [LRU_COUNTER_BITS-1:0] lru_idx;
-    logic [LRU_COUNTER_BITS-1:0] fill_way_idx;
+    logic [LRU_COUNTER_MAX-1:0] max_lru_val;
+    logic [LRU_COUNTER_MAX-1:0] lru_idx;
+    logic [LRU_COUNTER_MAX-1:0] fill_way_idx;
     logic [CACHE_LINE_BITS-1:0] temp_line;
 
     // --- Assign outputs from registers ---
@@ -209,7 +209,14 @@ module dcache #(
         next_lru_way        = '0;
         next_is_lru_dirty   = 1'b0;
         max_lru_val         = '0;
-
+        req_addr_reg        = '0;
+        lru_idx             = '0;
+        fill_way_idx        = '0;
+        req_we_reg          = '0;
+        req_wdata_reg       = '0;
+        evicted_data        = '0;
+        evicted_addr        = '0;
+        
         // --- Cache Lookup Logic (combinational) ---
         // Determine hit/miss and identify invalid/LRU ways for the current set
         for (int i = 0; i < NUM_WAYS; i++) begin
@@ -230,7 +237,7 @@ module dcache #(
             for (int i = 0; i < NUM_WAYS; i++) begin
                 if (cache_memory[req_idx][i].lru > max_lru_val) begin
                     max_lru_val = cache_memory[req_idx][i].lru;
-                    lru_idx = LRU_COUNTER_BITS'(i);
+                    lru_idx = LRU_COUNTER_MAX'(i);
                 end
             end
             next_lru_way[lru_idx] = 1'b1;
@@ -352,13 +359,13 @@ module dcache #(
                 if (has_invalid_way) begin
                     for (int i = 0; i < NUM_WAYS; i++) begin
                         if (invalid_way[i]) begin
-                            fill_way_idx = LRU_COUNTER_BITS'(i);
+                            fill_way_idx = LRU_COUNTER_MAX'(i);
                         end
                     end
                 end else begin
                     for (int i = 0; i < NUM_WAYS; i++) begin
                         if (lru_way[i]) begin
-                            fill_way_idx = LRU_COUNTER_BITS'(i);
+                            fill_way_idx = LRU_COUNTER_MAX'(i);
                         end
                     end
                 end
@@ -415,13 +422,13 @@ module dcache #(
                 if (has_invalid_way) begin
                     for (int i = 0; i < NUM_WAYS; i++) begin
                         if (invalid_way[i]) begin
-                            fill_way_idx = LRU_COUNTER_BITS'(i);
+                            fill_way_idx = LRU_COUNTER_MAX'(i);
                         end
                     end
                 end else begin
                     for (int i = 0; i < NUM_WAYS; i++) begin
                         if (lru_way[i]) begin
-                            fill_way_idx = LRU_COUNTER_BITS'(i);
+                            fill_way_idx = LRU_COUNTER_MAX'(i);
                         end
                     end
                 end
