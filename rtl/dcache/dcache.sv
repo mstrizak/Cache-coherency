@@ -146,6 +146,17 @@ module dcache #(
     logic                       mem_we_reg;
     logic [ADDR_WIDTH-1:0]      mem_addr_reg;
     logic [CACHE_LINE_BITS-1:0] mem_wdata_reg;
+    
+    logic [NUM_WAYS-1:0]    next_hit_way;
+    logic                   next_is_hit;
+    logic [NUM_WAYS-1:0]    next_invalid_way;
+    logic                   next_has_invalid_way;
+    logic [NUM_WAYS-1:0]    next_lru_way;
+    logic                   next_is_lru_dirty;
+    logic [LRU_COUNTER_BITS-1:0] max_lru_val;
+    logic [LRU_COUNTER_BITS-1:0] lru_idx;
+    logic [LRU_COUNTER_BITS-1:0] fill_way_idx;
+    logic [CACHE_LINE_BITS-1:0] temp_line;
 
     // --- Assign outputs from registers ---
     assign cpu_rdata    = cpu_rdata_reg;
@@ -190,12 +201,6 @@ module dcache #(
         mem_wdata_reg       = '0;
 
         // Internal signals for next state logic
-        logic [NUM_WAYS-1:0]    next_hit_way;
-        logic                   next_is_hit;
-        logic [NUM_WAYS-1:0]    next_invalid_way;
-        logic                   next_has_invalid_way;
-        logic [NUM_WAYS-1:0]    next_lru_way;
-        logic                   next_is_lru_dirty;
 
         next_hit_way        = '0;
         next_is_hit         = 1'b0;
@@ -203,6 +208,7 @@ module dcache #(
         next_has_invalid_way = 1'b0;
         next_lru_way        = '0;
         next_is_lru_dirty   = 1'b0;
+        max_lru_val         = '0;
 
         // --- Cache Lookup Logic (combinational) ---
         // Determine hit/miss and identify invalid/LRU ways for the current set
@@ -220,12 +226,11 @@ module dcache #(
 
         // Find LRU way if no invalid way exists
         if (!next_has_invalid_way) begin
-            logic [LRU_COUNTER_BITS-1:0] max_lru_val = 0;
-            int lru_idx = 0;
+            
             for (int i = 0; i < NUM_WAYS; i++) begin
                 if (cache_memory[req_idx][i].lru > max_lru_val) begin
                     max_lru_val = cache_memory[req_idx][i].lru;
-                    lru_idx = i;
+                    lru_idx = LRU_COUNTER_BITS'(i);
                 end
             end
             next_lru_way[lru_idx] = 1'b1;
@@ -343,19 +348,17 @@ module dcache #(
                 cpu_rdata_reg = mem_rdata[(req_word_offset * WORD_BITS) +: WORD_BITS];
 
                 // Find the way to refill (invalid or LRU)
-                int fill_way_idx = 0;
+                
                 if (has_invalid_way) begin
                     for (int i = 0; i < NUM_WAYS; i++) begin
                         if (invalid_way[i]) begin
-                            fill_way_idx = i;
-                            break; // Use the first invalid way found
+                            fill_way_idx = LRU_COUNTER_BITS'(i);
                         end
                     end
                 end else begin
                     for (int i = 0; i < NUM_WAYS; i++) begin
                         if (lru_way[i]) begin
-                            fill_way_idx = i;
-                            break;
+                            fill_way_idx = LRU_COUNTER_BITS'(i);
                         end
                     end
                 end
@@ -409,19 +412,16 @@ module dcache #(
                 end
             end else if (current_state == REFILL) begin
                 // On a cache refill (after a miss)
-                int fill_way_idx = 0;
                 if (has_invalid_way) begin
                     for (int i = 0; i < NUM_WAYS; i++) begin
                         if (invalid_way[i]) begin
-                            fill_way_idx = i;
-                            break;
+                            fill_way_idx = LRU_COUNTER_BITS'(i);
                         end
                     end
                 end else begin
                     for (int i = 0; i < NUM_WAYS; i++) begin
                         if (lru_way[i]) begin
-                            fill_way_idx = i;
-                            break;
+                            fill_way_idx = LRU_COUNTER_BITS'(i);
                         end
                     end
                 end
@@ -432,8 +432,8 @@ module dcache #(
 
                 if (req_we_reg) begin // If the original request was a write (write-allocate)
                     // Merge the fetched line with the CPU's write data for the specific word
-                    logic [CACHE_LINE_BITS-1:0] temp_line = mem_rdata;
-                    temp_line[(req_word_offset * WORD_BITS) +: WORD_BITS] = req_wdata_reg;
+                    temp_line <= mem_rdata;
+                    temp_line[(req_word_offset * WORD_BITS) +: WORD_BITS] <= req_wdata_reg;
                     cache_memory[req_idx][fill_way_idx].data  <= temp_line;
                     cache_memory[req_idx][fill_way_idx].dirty <= 1'b1; // Newly fetched line is now dirty
                 end else begin // If the original request was a read
