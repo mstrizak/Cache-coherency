@@ -418,21 +418,7 @@ module dcache #(
                     end
                 end
             end else if (current_state == REFILL) begin
-                // On a cache refill (after a miss)
-                if (has_invalid_way) begin
-                    for (int i = 0; i < NUM_WAYS; i++) begin
-                        if (invalid_way[i]) begin
-                            fill_way_idx = LRU_COUNTER_MAX'(i);
-                        end
-                    end
-                end else begin
-                    for (int i = 0; i < NUM_WAYS; i++) begin
-                        if (lru_way[i]) begin
-                            fill_way_idx = LRU_COUNTER_MAX'(i);
-                        end
-                    end
-                end
-
+                
                 // Write new data into the selected way
                 cache_memory[req_idx][fill_way_idx].tag   <= req_tag;
                 cache_memory[req_idx][fill_way_idx].valid <= 1'b1;

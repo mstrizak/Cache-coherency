@@ -37,6 +37,23 @@ module tb_dcache;
 
     // Internal testbench signals for simple Main Memory Model
     localparam MEM_SIZE_LINES = 256; // Defines memory as 256 cache lines (256 * 16 bytes = 4KB)
+    localparam ADDR_IDX10_TAG0_WORD0 = {23'h0000000, 5'hA, 4'h0}; // Address 0x0000_00A0
+    localparam ADDR_IDX10_TAG1_WORD0 = {23'h0000001, 5'hA, 4'h0}; // Address 0x0000_02A0
+    localparam ADDR_IDX10_TAG2_WORD0 = {23'h0000002, 5'hA, 4'h0}; // Address 0x0000_04A0
+    localparam ADDR_IDX10_TAG3_WORD0 = {23'h0000003, 5'hA, 4'h0}; // Address 0x0000_06A0
+    localparam ADDR_IDX10_TAG4_WORD0 = {23'h0000004, 5'hA, 4'h0}; // Address 0x0000_08A0 (for eviction test)
+    localparam WRITE_DATA_TAG0_WORD1 = 32'hFACE_CAFE;
+    logic [WORD_BITS-1:0] read_data; // Variable to store data read from cache
+    logic is_hit, is_miss;         // Variables to store hit/miss status
+    logic [CACHE_LINE_BITS-1:0] line_data_from_mem; // To read entire cache lines from main memory for verification
+
+    localparam ADDR_IDX11_TAG0_WORD0 = {23'h0000000, 5'h11, 4'h0}; // Index 17 (0x11), Tag 0
+    localparam ADDR_IDX11_TAG1_WORD0 = {23'h0000001, 5'h11, 4'h0};
+    localparam ADDR_IDX11_TAG2_WORD0 = {23'h0000002, 5'h11, 4'h0};
+    localparam ADDR_IDX11_TAG3_WORD0 = {23'h0000003, 5'h11, 4'h0};
+    localparam ADDR_IDX11_TAG4_WORD0 = {23'h0000004, 5'h11, 4'h0}; // For eviction
+    localparam WRITE_DATA_TAG4_WORD1 = 32'hDEAD_BEEF;
+
     // This array stores the content of our simulated main memory.
     logic [CACHE_LINE_BITS-1:0] main_memory[MEM_SIZE_LINES-1:0];
 
@@ -232,11 +249,6 @@ module tb_dcache;
         // Index 0xA means bits [8:4] are 5'b01010.
 
         // Base addresses for Index 0xA with different Tags (word-aligned, word offset 0)
-        localparam ADDR_IDX10_TAG0_WORD0 = {23'h0000000, 5'hA, 4'h0}; // Address 0x0000_00A0
-        localparam ADDR_IDX10_TAG1_WORD0 = {23'h0000001, 5'hA, 4'h0}; // Address 0x0000_02A0
-        localparam ADDR_IDX10_TAG2_WORD0 = {23'h0000002, 5'hA, 4'h0}; // Address 0x0000_04A0
-        localparam ADDR_IDX10_TAG3_WORD0 = {23'h0000003, 5'hA, 4'h0}; // Address 0x0000_06A0
-        localparam ADDR_IDX10_TAG4_WORD0 = {23'h0000004, 5'hA, 4'h0}; // Address 0x0000_08A0 (for eviction test)
 
         // Initialize main_memory lines corresponding to these addresses
         // Each line is 128 bits (4 words). Words are in order: [Word3, Word2, Word1, Word0]
@@ -268,10 +280,7 @@ module tb_dcache;
         mem_rst_n = 1'b1;
         $display($time, " Reset released. Starting test...");
 
-        logic [WORD_BITS-1:0] read_data; // Variable to store data read from cache
-        logic is_hit, is_miss;         // Variables to store hit/miss status
-        logic [CACHE_LINE_BITS-1:0] line_data_from_mem; // To read entire cache lines from main memory for verification
-
+        
         // --- Test 1: Initial Read Miss (Tag 0, Index 10, Word 0) ---
         // Expect: Cache miss, fetches line from main memory, provides data.
         $display("\n--- Test 1: Initial Read Miss (Addr 0x%h) ---", ADDR_IDX10_TAG0_WORD0);
@@ -299,7 +308,6 @@ module tb_dcache;
         // --- Test 4: Write Hit (Tag 0, Index 10, Word 1) ---
         // Expect: Cache hit, updates cache line, sets dirty bit.
         $display("\n--- Test 4: Write Hit (Addr 0x%h, Word 1) ---", ADDR_IDX10_TAG0_WORD0 + BYTES_PER_WORD);
-        localparam WRITE_DATA_TAG0_WORD1 = 32'hFACE_CAFE;
         send_cpu_req(1, ADDR_IDX10_TAG0_WORD0 + BYTES_PER_WORD, WRITE_DATA_TAG0_WORD1, read_data, is_hit, is_miss);
         assert (is_hit) else $error("Test 4 Failed: Expected write hit.");
         $display($time, " Test 4: Write hit successful.");
@@ -356,11 +364,7 @@ module tb_dcache;
         // This sequence fills another set (Index 0x11, decimal 17) with clean lines.
         // Then, a write miss forces the eviction of a clean line (no write-back),
         // and the new data is merged during refill.
-        localparam ADDR_IDX11_TAG0_WORD0 = {23'h0000000, 5'h11, 4'h0}; // Index 17 (0x11), Tag 0
-        localparam ADDR_IDX11_TAG1_WORD0 = {23'h0000001, 5'h11, 4'h0};
-        localparam ADDR_IDX11_TAG2_WORD0 = {23'h0000002, 5'h11, 4'h0};
-        localparam ADDR_IDX11_TAG3_WORD0 = {23'h0000003, 5'h11, 4'h0};
-        localparam ADDR_IDX11_TAG4_WORD0 = {23'h0000004, 5'h11, 4'h0}; // For eviction
+
 
         // Initialize main memory for this new set
         main_memory[ADDR_IDX11_TAG0_WORD0 / CACHE_LINE_BYTES] = {32'h1000_0000, 32'h2000_0000, 32'h3000_0000, 32'h4000_0000};
@@ -392,7 +396,7 @@ module tb_dcache;
 
         // At this point, Set 17 is full with clean lines. Tag 0 should be the LRU.
         $display("\n--- Test 14: Write Miss forcing Clean Eviction (Tag 4, Index 17, Word 1) ---");
-        localparam WRITE_DATA_TAG4_WORD1 = 32'hDEAD_BEEF;
+
         send_cpu_req(1, ADDR_IDX11_TAG4_WORD0 + BYTES_PER_WORD, WRITE_DATA_TAG4_WORD1, read_data, is_hit, is_miss);
         assert (is_miss) else $error("Test 14 Failed: Expected write miss.");
 
